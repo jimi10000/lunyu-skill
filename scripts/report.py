@@ -119,7 +119,8 @@ def summarize_bugs(bugs, date_str):
         dist[prio] = dist.get(prio, 0) + 1
         status = it.get("status", "")
         if status in ("关闭", "closed", "done"):
-            closed_date = it.get("closed_date", it.get("updated_at", ""))
+            # 优先用关闭时记录的时间，其次更新/创建时间
+            closed_date = it.get("closed_at", it.get("updated_at", ""))
             try:
                 cd = datetime.strptime(str(closed_date)[:10], "%Y-%m-%d").date()
                 if d and cd == d:

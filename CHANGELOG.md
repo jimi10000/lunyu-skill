@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-10-26
+
+### Fixed
+
+- **`build_apk.sh`**：修复模块路径带冒号导致 APK 定位失败；`--module` 现在接收目录名（`app`），自动转 gradle 坐标（`:app`）；md5 兼容 macOS（`md5 -q`）
+- **`vm_test.sh`**：修复 `ANDROID_HOME` 默认值带单引号导致路径错误；可执行文件按平台适配（Windows `.exe` / Unix 无后缀）
+- **`bug_ledger.py`**：缺陷关闭时记录 `closed_at`，重新打开时清除，日报/周报统计更准确
+- **`report.py`**：读取 `closed_at` 优先于 `updated_at`
+- **`release_note.py`**：修复 `related_version` 为空时把所有关闭缺陷误算进版本
+- **`flow.py`**：修复无 HEAD 仓库（刚 init 未提交）时 `git diff HEAD` 报错，自动回退到 `git diff`
+- **`github-publish.sh`**：用 `trap cleanup EXIT` 确保推送失败时也清除 remote URL 里的 token
+- **`send_mail.py`**：非 SSL 模式默认端口改 587，补 STARTTLS 前后 EHLO，检查收件人拒绝
+- **`self_update.sh`**：版本比较去掉 `v` 前缀，避免 `v1.1.0` vs `1.1.0` 误判；本地比远端新时不降级
+
 ## [1.1.0] - 2026-10-26
 
 ### Added

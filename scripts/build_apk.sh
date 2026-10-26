@@ -7,7 +7,7 @@
 # APK 路径 + md5（md5 是交付铁律之一，直接生成）。
 #
 # 用法:
-#   ./build_apk.sh [--dir <android项目目录>] [--module :app] \
+#   ./build_apk.sh [--dir <android项目目录>] [--module <模块目录>] \
 #       [--flavor <flavor>] [--build-type release|debug] \
 #       [--arch <abi>] [--out <输出目录>]
 #
@@ -16,10 +16,10 @@
 #
 # 默认值:
 #   项目目录      当前目录
-#   模块          :app
+#   模块          app（对应 gradle 模块 :app；多级模块传 feature/home）
 #   build-type    release
-#   架构          arm64-v8a（通过 -Pabi 传给 gradle，若无此参数则忽略）
-#   输出目录      <项目目录>/build/outputs/apk
+#   架构          不传 -Pabi（仅当显式指定 --arch 时才传给 gradle）
+#   输出目录      <项目目录>/<模块>/build/outputs/apk
 #
 # 退出码: 0=成功 / 1=失败
 # ============================================================
@@ -27,9 +27,9 @@ set -euo pipefail
 
 # ---------- 参数解析 ----------
 PROJECT_DIR="$(pwd)"
-MODULE=":app"
+MODULE="app"
 BUILD_TYPE="release"
-ARCH="arm64-v8a"
+ARCH=""
 OUT_DIR=""
 
 while [ $# -gt 0 ]; do
@@ -56,23 +56,28 @@ if [ ! -x "$GRADLEW" ]; then
 fi
 
 # ---------- 构建 ----------
-TASK="assemble${BUILD_TYPE^}"
+# 模块目录 -> gradle 坐标：app -> :app ; feature/home -> :feature:home
+MODULE="${MODULE#:}"
+MODULE_COLON=":${MODULE//\//:}"
+TASK="${MODULE_COLON}:assemble${BUILD_TYPE^}"
 if [ -n "${FLAVOR:-}" ]; then
-  TASK="assemble${FLAVOR^}${BUILD_TYPE^}"
+  TASK="${MODULE_COLON}:assemble${FLAVOR^}${BUILD_TYPE^}"
 fi
 echo "=========================================="
 echo "Android 自动化打包"
 echo "  项目目录 : $PROJECT_DIR"
 echo "  模块     : $MODULE"
 echo "  Task     : $TASK"
-echo "  架构     : $ARCH"
+if [ -n "$ARCH" ]; then
+  echo "  架构     : $ARCH (通过 -Pabi 传入)"
+fi
 echo "=========================================="
 
 cd "$PROJECT_DIR"
 if [ -n "$ARCH" ]; then
-  "$GRADLEW" "$MODULE:$TASK" -Pabi="$ARCH" --no-daemon
+  "$GRADLEW" "$TASK" -Pabi="$ARCH" --no-daemon
 else
-  "$GRADLEW" "$MODULE:$TASK" --no-daemon
+  "$GRADLEW" "$TASK" --no-daemon
 fi
 
 # ---------- 定位 APK ----------
@@ -96,5 +101,13 @@ if [ -z "$APK" ]; then
 fi
 
 echo "APK: $APK"
-echo "MD5: $(md5sum "$APK" | awk '{print $1}')"
+# md5 兼容 Linux(md5sum) / macOS(md5 -q) / Windows Git Bash(md5sum)
+if command -v md5sum >/dev/null 2>&1; then
+  APK_MD5=$(md5sum "$APK" | awk '{print $1}')
+elif command -v md5 >/dev/null 2>&1; then
+  APK_MD5=$(md5 -q "$APK")
+else
+  APK_MD5="(md5 工具不可用)"
+fi
+echo "MD5: $APK_MD5"
 echo "BUILD_DONE"

@@ -65,7 +65,14 @@ fi
 echo "远端版本: $REMOTE_VERSION"
 
 # ---------- 版本比较 ----------
-if [ "$FORCE" != "1" ] && [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+# 归一化：去掉可能的 v 前缀，避免 "v1.1.0" 与 "1.1.0" 被 sort -V 误判
+norm() { printf '%s' "${1#v}"; }
+LOCAL_NORM="$(norm "$LOCAL_VERSION")"
+REMOTE_NORM="$(norm "$REMOTE_VERSION")"
+
+# 用 sort -V 做语义化版本比较：本地 >= 远端则不更新（避免降级）
+NEWER=$(printf '%s\n%s\n' "$REMOTE_NORM" "$LOCAL_NORM" | sort -V | head -1)
+if [ "$FORCE" != "1" ] && [ "$NEWER" = "$REMOTE_NORM" ]; then
   echo "已是最新版本 ($LOCAL_VERSION)，无需更新。"
   exit 0
 fi

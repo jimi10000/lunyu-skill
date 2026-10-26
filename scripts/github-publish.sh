@@ -119,6 +119,9 @@ fi
 # 推送
 git remote add origin "https://$GITHUB_USER:$TOKEN@github.com/$GITHUB_USER/$REPO.git" 2>/dev/null || \
   git remote set-url origin "https://$GITHUB_USER:$TOKEN@github.com/$GITHUB_USER/$REPO.git"
+# 无论推送成败，退出前必须清掉 remote URL 里的 token
+cleanup() { git remote set-url origin "https://github.com/$GITHUB_USER/$REPO.git" 2>/dev/null || true; }
+trap cleanup EXIT
 git push -u origin main 2>&1 | tail -3
 echo "  推送成功"
 
@@ -145,6 +148,3 @@ echo "=========================================="
 echo "  仓库地址: https://github.com/$GITHUB_USER/$REPO"
 echo "  克隆命令: git clone https://github.com/$GITHUB_USER/$REPO.git"
 echo "=========================================="
-
-# 清理本地 remote 中的 token
-git remote set-url origin "https://github.com/$GITHUB_USER/$REPO.git" 2>/dev/null || true

@@ -128,6 +128,11 @@ def cmd_update(args):
                     print(f"非法状态, 可选: {', '.join(STATUSES)}")
                     sys.exit(1)
                 b["status"] = args.status
+                # 关闭时记录 closed_at，重新打开时清除
+                if args.status == "关闭":
+                    b["closed_at"] = now()
+                else:
+                    b.pop("closed_at", None)
             if args.priority:
                 if args.priority not in PRIORITIES:
                     print(f"非法优先级, 可选: {', '.join(PRIORITIES)}")

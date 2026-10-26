@@ -62,6 +62,10 @@ def get_diff_args(args):
         return ["diff", "--cached"]
     if args.range:
         return ["diff", args.range]
+    # 无 HEAD（刚 init 未提交）时 git diff HEAD 会报错，回退到 git diff
+    rc, _ = git(["rev-parse", "--verify", "HEAD"], find_root(args.path))
+    if rc != 0:
+        return ["diff"]
     return ["diff", "HEAD"]
 
 

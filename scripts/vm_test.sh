@@ -10,7 +10,7 @@
 #   ./vm_test.sh <apk路径> <应用包名> [输出目录]
 #
 # 环境变量:
-#   ANDROID_HOME    Android SDK 路径（默认 C:\\AndroidSDK）
+#   ANDROID_HOME    Android SDK 路径（默认 C:/AndroidSDK，兼容 Git Bash 正斜杠）
 #   AVD_NAME        模拟器 AVD 名称（默认 fhw_test）
 #   EXTRA_LOGCAT    额外的 logcat 过滤关键词（逗号分隔，可选）
 #
@@ -30,10 +30,15 @@ APK="$1"
 PACKAGE="$2"
 OUT_DIR="${3:-$(pwd)}"
 
-export ANDROID_HOME="${ANDROID_HOME:-'C:\AndroidSDK'}"
+export ANDROID_HOME="${ANDROID_HOME:-C:/AndroidSDK}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-ADB="$ANDROID_HOME/platform-tools/adb.exe"
-EMU="$ANDROID_HOME/emulator/emulator.exe"
+# 可执行文件名按平台适配：Windows 是 .exe，macOS/Linux 无后缀
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) EXE_SUFFIX=".exe" ;;
+  *) EXE_SUFFIX="" ;;
+esac
+ADB="${ADB:-$ANDROID_HOME/platform-tools/adb$EXE_SUFFIX}"
+EMU="${EMU:-$ANDROID_HOME/emulator/emulator$EXE_SUFFIX}"
 AVD_NAME="${AVD_NAME:-fhw_test}"
 LOG="$OUT_DIR/vm_test.log"
 

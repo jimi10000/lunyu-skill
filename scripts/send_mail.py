@@ -11,11 +11,11 @@ send_mail.py — 发送带附件的邮件（SMTP）
 
 环境变量:
     SMTP_SERVER     SMTP 服务器，默认 smtp.qq.com
-    SMTP_PORT       SMTP 端口，默认 465
+    SMTP_PORT       SMTP 端口，默认 465（SSL）/ 587（非 SSL）
     SMTP_SENDER     发件人邮箱（必填）
     SMTP_AUTH       授权码/密码（必填，QQ 邮箱用授权码而非登录密码）
     SMTP_RECEIVER   收件人邮箱，多个用逗号分隔（必填）
-    SMTP_SSL        是否 SSL，默认 true；设为 false 则用普通 SMTP
+    SMTP_SSL        是否 SSL，默认 true；设为 false 则用普通 SMTP+STARTTLS
 
 退出码: 0=成功 / 1=失败
 """
@@ -42,7 +42,8 @@ def send_mail(subject, body, attachment_path):
         raise FileNotFoundError(f"附件不存在: {attachment_path}")
 
     server_host = os.environ.get("SMTP_SERVER", "smtp.qq.com")
-    server_port = int(os.environ.get("SMTP_PORT", "465"))
+    use_ssl = os.environ.get("SMTP_SSL", "true").lower() != "false"
+    server_port = int(os.environ.get("SMTP_PORT", "465" if use_ssl else "587"))
     sender = os.environ.get("SMTP_SENDER", "")
     auth = os.environ.get("SMTP_AUTH", "")
     receivers = [r.strip() for r in os.environ.get("SMTP_RECEIVER", "").split(",") if r.strip()]
@@ -69,10 +70,14 @@ def send_mail(subject, body, attachment_path):
         server = smtplib.SMTP_SSL(server_host, server_port)
     else:
         server = smtplib.SMTP(server_host, server_port)
+        server.ehlo()
         server.starttls()
+        server.ehlo()
     try:
         server.login(sender, auth)
-        server.sendmail(sender, receivers, msg.as_string())
+        refused = server.sendmail(sender, receivers, msg.as_string())
+        if refused:
+            raise RuntimeError(f"部分收件人被拒绝: {refused}")
     finally:
         server.quit()
     return True

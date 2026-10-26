@@ -96,7 +96,7 @@ def collect_closed_bugs(root, version):
         if b.get("status") != "关闭":
             continue
         rv = b.get("related_version") or ""
-        if version and version in rv:
+        if rv and version in rv:
             out.append(b)
     return out
 
