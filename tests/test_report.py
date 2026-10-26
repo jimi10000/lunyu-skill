@@ -14,6 +14,8 @@ import sys
 import tempfile
 import unittest
 from datetime import date, timedelta
+from io import StringIO
+from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import report
@@ -31,6 +33,14 @@ def write_json(root, rel, data):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
+    return p
+
+
+def write_report(root, name, text):
+    p = os.path.join(root, ".lunyu", "reports", name)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(text)
     return p
 
 
@@ -133,6 +143,139 @@ class GenReportTest(unittest.TestCase):
 
     def test_esc(self):
         self.assertEqual(report.esc("a\nb"), "a b")
+
+
+DAILY_TPL = """# 日报：{d}
+
+## 今日完成
+- 完成 {tag} 功能
+
+## 今日数据
+- 缺陷台账：无
+
+## 明日计划
+- 推进 {tag} 联调
+
+## 风险与阻塞
+- 无
+"""
+
+RETRO_TPL = """# 日报：{d}
+
+## 今日完成
+- 今日产出 {tag}
+
+## 收获
+- 沉淀了 {tag} 的排错套路
+
+## 失误与改进
+- 忘了回归，下次先跑测试再提测
+
+## 明日计划
+- 补齐 {tag} 用例
+"""
+
+
+class AggregateTest(unittest.TestCase):
+    """周报聚合本周日报 / 总结聚合周报"""
+
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.root = make_project()
+        os.chdir(self.root)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+
+    def run_gen(self, fn, *a, **kw):
+        buf = StringIO()
+        with redirect_stdout(buf):
+            content, fname = fn(*a, **kw)
+        return content, fname, buf.getvalue()
+
+    def test_extract_sections(self):
+        secs = report.extract_sections(DAILY_TPL.format(d="2026-10-27", tag="登录"))
+        self.assertIn("完成 登录 功能", secs["收获"])
+        self.assertIn("推进 登录 联调", secs["明日计划"])
+        self.assertEqual(secs["失误与改进"], [])
+        # 占位符不应被聚合
+        self.assertNotIn("无", secs["明日计划"])
+
+    def test_weekly_aggregates_this_week_dailies(self):
+        # 本周：周一(10-26) 周二(10-27)；上周：10-18 应被忽略
+        for d, tag in [("2026-10-26", "周一"), ("2026-10-27", "周二"), ("2026-10-18", "上周")]:
+            write_report(self.root, f"日报-{d}.md", DAILY_TPL.format(d=d, tag=tag))
+        content, _, hint = self.run_gen(report.gen_weekly, "项目X", "me",
+                                        ["本周手写内容"], "2026-10-26")
+        self.assertIn("（自动聚合自本周日报）", content)
+        self.assertIn("[日报-2026-10-26] 完成 周一 功能", content)
+        self.assertIn("[日报-2026-10-27] 推进 周二 联调", content)
+        self.assertNotIn("上周", content)
+        # 用户手写在前，聚合在后
+        self.assertLess(content.index("本周手写内容"),
+                        content.index("（自动聚合自本周日报）"))
+        self.assertIn("已合并本周 2 篇日报", hint)
+
+    def test_weekly_aggregates_retro_sections(self):
+        write_report(self.root, "日报-2026-10-27.md",
+                     RETRO_TPL.format(d="2026-10-27", tag="支付"))
+        content, _, _ = self.run_gen(report.gen_weekly, "项目X", "me", [], "2026-10-26")
+        gain_idx = content.index("（自动聚合自本周日报）收获")
+        loss_idx = content.index("（自动聚合自本周日报）失误与改进")
+        plan_idx = content.index("（自动聚合自本周日报）明日计划")
+        # 分别落在 本周完成 / 风险与阻塞 / 下周计划 章节内
+        self.assertLess(content.index("## 本周完成"), gain_idx)
+        self.assertLess(gain_idx, content.index("## 本周数据"))
+        self.assertLess(content.index("## 风险与阻塞"), loss_idx)
+        self.assertLess(content.index("## 下周计划"), plan_idx)
+        self.assertIn("忘了回归，下次先跑测试再提测", content)
+
+    def test_weekly_without_dailies(self):
+        content, _, hint = self.run_gen(report.gen_weekly, "项目X", "me",
+                                        ["本周手写内容"], "2026-10-26")
+        self.assertNotIn("（自动聚合自本周日报）", content)
+        self.assertIn("本周（", hint)
+        self.assertIn("无日报", hint)
+
+    def test_weekly_no_agg_flag(self):
+        write_report(self.root, "日报-2026-10-27.md",
+                     DAILY_TPL.format(d="2026-10-27", tag="登录"))
+        content, _, _ = self.run_gen(report.gen_weekly, "项目X", "me",
+                                     ["本周手写内容"], "2026-10-26", agg=False)
+        self.assertNotIn("（自动聚合自本周日报）", content)
+        self.assertNotIn("完成 登录 功能", content)
+
+    def test_summary_aggregates_weeklies(self):
+        write_report(self.root, "周报-2026-10-19.md", """# 周报：2026-10-13 ~ 2026-10-19
+
+## 本周完成
+- 打通 CI 流水线
+
+## 下周计划
+- 接入产物归档
+""")
+        content, fname, hint = self.run_gen(report.gen_summary, "项目X", "me", ["核心成果"])
+        self.assertEqual(fname, f"项目总结-{date.today().strftime('%Y%m%d')}.md")
+        self.assertIn("（自动聚合自周报）", content)
+        self.assertIn("[周报-2026-10-19] 打通 CI 流水线", content)
+        self.assertLess(content.index("核心成果"),
+                        content.index("（自动聚合自周报）"))
+        self.assertIn("已合并 1 篇周报", hint)
+
+    def test_aggregation_is_fault_tolerant(self):
+        # 格式不符（无标题）
+        write_report(self.root, "日报-2026-10-27.md", "乱七八糟的一段话，没有任何标题\n")
+        # 编码异常
+        write_report(self.root, "日报-2026-10-28.md", "")
+        with open(os.path.join(self.root, ".lunyu", "reports", "日报-2026-10-28.md"),
+                  "wb") as f:
+            f.write(b"\xff\xfe\x00\x80bad bytes")
+        # 同名目录（读取会抛 OSError）
+        os.makedirs(os.path.join(self.root, ".lunyu", "reports", "日报-2026-10-29.md"))
+        content, _, hint = self.run_gen(report.gen_weekly, "项目X", "me", [], "2026-10-26")
+        self.assertIn("# 周报：", content)
+        self.assertNotIn("（自动聚合自本周日报）", content)
+        self.assertIn("2 篇报告无法读取/格式不符", hint)
 
 
 class LoadChangelogTest(unittest.TestCase):

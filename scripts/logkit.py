@@ -699,18 +699,22 @@ def main():
     dest = os.path.abspath(args.dest)
     written = []
 
-    if args.lang in ("python", "both"):
-        base = os.path.join(dest, "logkit") if args.lang == "both" else dest
-        written.append(write(os.path.join(base, "__init__.py"), PY_INIT))
-        written.append(write(os.path.join(base, "core.py"), PY_MAIN))
-        written.append(write(os.path.join(base, "example.py"), PY_EXAMPLE))
-        written.append(write(os.path.join(base, "README.md"), PY_README))
+    try:
+        if args.lang in ("python", "both"):
+            base = os.path.join(dest, "logkit") if args.lang == "both" else dest
+            written.append(write(os.path.join(base, "__init__.py"), PY_INIT))
+            written.append(write(os.path.join(base, "core.py"), PY_MAIN))
+            written.append(write(os.path.join(base, "example.py"), PY_EXAMPLE))
+            written.append(write(os.path.join(base, "README.md"), PY_README))
 
-    if args.lang in ("ts", "both"):
-        base = os.path.join(dest, "ts") if args.lang == "both" else dest
-        written.append(write(os.path.join(base, "core.ts"), TS_CORE))
-        written.append(write(os.path.join(base, "example.ts"), TS_EXAMPLE))
-        written.append(write(os.path.join(base, "README.md"), TS_README))
+        if args.lang in ("ts", "both"):
+            base = os.path.join(dest, "ts") if args.lang == "both" else dest
+            written.append(write(os.path.join(base, "core.ts"), TS_CORE))
+            written.append(write(os.path.join(base, "example.ts"), TS_EXAMPLE))
+            written.append(write(os.path.join(base, "README.md"), TS_README))
+    except OSError as e:
+        print(f"错误: 生成失败: {e}", file=sys.stderr)
+        return 1
 
     print(f"已生成 {len(written)} 个文件 -> {dest}")
     for p in written:
@@ -726,7 +730,8 @@ def main():
         print("  2. 业务处: const log = getLogger('payment'); log.info('msg', { order_id: x })")
     print()
     print("分类表按业务改: 编辑 core.py / core.ts 里的 CATEGORIES")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -5,11 +5,17 @@
 
 用法:
   tag      生成版本存档记录、CHANGELOG 片段、tag/合并/回滚命令
+           --artifact 可多次传入交付产物, 自动算 sha256 入库存档
+           回滚预案同步落盘到版本记录(回滚命令/影响范围/校验方式)
   list     查看历史版本存档
-  show     查看指定版本详情
+  show     查看指定版本详情(原样回显产物摘要与回滚预案)
   rollback 生成指定版本的回滚指引
+
+示例:
+  python release_note.py tag --version 1.2.0 --artifact build/app.apk --artifact build/app.map
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -102,6 +108,77 @@ def collect_closed_bugs(root, version):
     return out
 
 
+def sha256_file(path):
+    """算文件 sha256（分块读，大文件不炸内存）。"""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def collect_artifacts(paths):
+    """采集产物摘要: 文件名/大小/sha256。
+
+    返回 (records, failures)。文件缺失或读不动只记 failure，不中断打版。
+    """
+    recs, failures = [], []
+    for p in paths or []:
+        try:
+            if not os.path.isfile(p):
+                failures.append((p, "文件不存在"))
+                continue
+            recs.append({
+                "name": os.path.basename(p),
+                "size": os.path.getsize(p),
+                "sha256": sha256_file(p),
+            })
+        except (OSError, ValueError) as e:
+            failures.append((p, str(e) or "读取失败"))
+    return recs, failures
+
+
+def build_rollback_plan(version, tag, branch, prev_version, closed_bugs, artifacts=None):
+    """构建回滚预案（回滚命令/影响范围/校验方式），供落盘与终端打印共用同一份数据。"""
+    bug_list = list(closed_bugs or [])
+    prev = prev_version or None
+    commands = []
+    if prev:
+        commands += [
+            f"git checkout {branch}",
+            f"# 方案A 撤销 tag(仅本地): git tag -d {tag} && git push origin :refs/tags/{tag}",
+            "# 方案B 回退到上一版本: git revert -m 1 <本次合并commit>（推荐, 保留历史）",
+            f"# 或强制回退: git reset --hard v{prev}",
+            f"git tag -a {tag}-rollback -m \"rollback to {prev}\"",
+            f"git push origin {branch} --tags",
+        ]
+    else:
+        commands += [
+            f"# 无上一版本, 只能撤销本次发布: git tag -d {tag}",
+            f"git push origin :refs/tags/{tag}",
+        ]
+
+    verify = [
+        "git log --oneline -5",
+        "git describe --tags",
+        "重新跑单元测试确认功能正常",
+    ]
+    for a in artifacts or []:
+        verify.append(f"shasum -a 256 {a['name']}   # 期望 sha256={a['sha256']}")
+
+    return {
+        "target": version,
+        "commands": commands,
+        "impact": {
+            "branch": branch,
+            "closed_bugs": bug_list,
+            "note": f"{branch or '-'} 分支, 本次关闭缺陷 {', '.join(bug_list) or '无'} 将回退"
+                    + (f"; 回退到版本 {prev}" if prev else "; 无上一版本可回退"),
+        },
+        "verify": verify,
+    }
+
+
 def open_blockers(root):
     p = os.path.join(root, ".lunyu", "bugs.json")
     if not os.path.exists(p):
@@ -150,6 +227,14 @@ def cmd_tag(args):
     bugs = collect_closed_bugs(root, version)
     blockers = open_blockers(root)
 
+    artifacts, bad_artifacts = collect_artifacts(getattr(args, "artifact", None) or [])
+    prev_version = data["releases"][-1]["version"] if data["releases"] else None
+
+    bug_ids = [b["id"] for b in bugs]
+    plan = build_rollback_plan(
+        version, tag, args.branch or branch, prev_version, bug_ids, artifacts
+    )
+
     rec = {
         "version": version,
         "tag": tag,
@@ -157,10 +242,12 @@ def cmd_tag(args):
         "baseline": args.baseline or "",
         "commit": sha,
         "summary": args.summary or "",
-        "closed_bugs": [b["id"] for b in bugs],
+        "closed_bugs": bug_ids,
         "open_blockers": [b["id"] for b in blockers],
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "rolled_back": False,
+        "artifacts": artifacts,
+        "rollback_plan": plan,
     }
     data["releases"].append(rec)
     save(spath, data)
@@ -206,6 +293,13 @@ def cmd_tag(args):
     print(f"Commit   : {sha}")
     print(f"变更摘要 : {rec['summary'] or '-'}")
     print(f"关闭缺陷 : {', '.join(rec['closed_bugs']) or '无'}")
+    if rec["artifacts"]:
+        print(f"交付产物 : {len(rec['artifacts'])} 个")
+        for a in rec["artifacts"]:
+            print(f"  - {a['name']}  size={a['size']}  sha256={a['sha256']}")
+    if bad_artifacts:
+        print(f"【警告】{len(bad_artifacts)} 个产物无法入库: "
+              + ", ".join(f"{p}({why})" for p, why in bad_artifacts))
     if blockers:
         print(f"【高风险】未关闭 P0/P1: {', '.join(rec['open_blockers'])} -> 不建议合入 main, 需放行说明")
     print()
@@ -219,11 +313,13 @@ def cmd_tag(args):
     print(f'git tag -a {tag} -m "release {version}: {rec["summary"] or "版本发布"}"')
     print(f"git push origin main --tags")
     print()
-    print("--- 回滚预案 ---")
-    print(f"# 方案A 撤销 tag(仅本地): git tag -d {tag} && git push origin :refs/tags/{tag}")
-    print(f"# 方案B 回退到上一版本: git revert <本次合并commit> 或 git reset --hard <上一版本commit>")
-    print(f"# 校验: git log --oneline -5 && git describe --tags")
-    print(f"# 影响范围: {rec['branch']} 分支, 本次关闭缺陷 {', '.join(rec['closed_bugs']) or '无'} 将回退")
+    plan = rec["rollback_plan"]
+    print("--- 回滚预案 (已落入存档) ---")
+    for c in plan["commands"]:
+        print(c)
+    print(f"# 影响范围: {plan['impact']['note']}")
+    for v in plan["verify"]:
+        print(f"# 校验: {v}")
     print()
     print(f"CHANGELOG 已更新: {changelog}")
     print(f"存档记录: {spath}")
@@ -313,6 +409,8 @@ def main():
     t.add_argument("--baseline", help="基线分支, 如 dev")
     t.add_argument("--summary", help="变更摘要")
     t.add_argument("--changes", nargs="*", help="变更条目")
+    t.add_argument("--artifact", action="append", default=[],
+                   help="交付产物路径, 可多次传入; 自动算 sha256 存入版本记录")
     t.set_defaults(func=cmd_tag)
 
     l = sub.add_parser("list", help="版本列表")

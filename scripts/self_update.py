@@ -13,8 +13,18 @@ self_update.py — 一键自更新 lunyu 技能包（跨平台，零第三方依
   2. 读本地版本（SKILL.md frontmatter，优先顶层 version，回退 metadata.version）
   3. 从 GitHub 拉远端最新版本号
   4. 有新版 -> 下载 zip（优先 Release 附件，回退分支归档）-> 覆盖（保留 .lunyu 数据）
-  5. 清理远端已删除的旧文件（--no-prune 可关闭）
+  5. 清理远端已删除的旧文件（只删上次安装清单内的文件；--no-prune 可关闭）
   6. 无新版 -> 提示已是最新
+
+用户数据安全模型（重要）：
+  更新期间用户数据 .lunyu/ 通过「同一分区原子换名」在施工区之间转移，
+  绝不使用「先 rmtree 再 copytree」。
+  任意时刻磁盘上都至少存在一份完整的用户数据：
+      更新前    -> .lunyu/
+      覆盖施工期 -> .lunyu.old.tmp/
+      恢复完成  -> .lunyu/
+  任何步骤失败（Ctrl-C / 磁盘满 / 进程被杀）都会自动把 .lunyu.old.tmp
+  换回 .lunyu/，并清理所有临时目录，不留残留。
 
 用法:
   python scripts/self_update.py            # 检查并（交互式）更新
@@ -30,6 +40,7 @@ self_update.py — 一键自更新 lunyu 技能包（跨平台，零第三方依
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -44,6 +55,15 @@ BRANCH = os.environ.get("LUNYU_BRANCH", "main")
 
 # 覆盖时永不删除的目录（用户数据 / 本地仓库）
 KEEP_DIRS = {".lunyu", ".git", "__pycache__"}
+
+DATA_DIR_NAME = ".lunyu"
+# 更新施工期 .lunyu 的临时存放点（与 .lunyu 同分区，保证 os.replace 原子可用）
+OLD_DATA_TMP = ".lunyu.old.tmp"
+# 老版本（"删除+复制"实现）失败后残留的备份目录，见到即回收
+LEGACY_BAK_TMP = ".lunyu.bak.tmp"
+# 上次安装真正落盘的文件清单，prune 的唯一依据
+MANIFEST_NAME = ".lunyu-manifest.json"
+MANIFEST_VERSION = 1
 
 UA = "lunyu-self-update/1.0"
 
@@ -110,7 +130,6 @@ def http_get(url, timeout=30):
 def _decode_api_json(raw):
     """GitHub contents 接口返回 JSON，content 字段是 base64。"""
     import base64
-    import json
 
     j = json.loads(raw)
     if j.get("encoding") == "base64" and j.get("content"):
@@ -223,51 +242,197 @@ def iter_files(root):
     return rels
 
 
-def apply_update(skill_dir, src_dir, prune=True):
-    """用 src_dir 覆盖 skill_dir，保留 KEEP_DIRS，可选清理多余文件。"""
-    # 1. 备份用户数据
-    data_dir = os.path.join(skill_dir, ".lunyu")
-    backup = None
-    if os.path.isdir(data_dir):
-        backup = os.path.join(skill_dir, ".lunyu.bak.tmp")
-        if os.path.exists(backup):
-            shutil.rmtree(backup)
-        shutil.copytree(data_dir, backup)
+# ---------------- 安装清单（prune 的唯一依据） ----------------
+def read_manifest(skill_dir):
+    """读上次安装落盘的文件清单。
 
-    # 2. 覆盖写入
-    written = 0
-    for rel in iter_files(src_dir):
-        s = os.path.join(src_dir, rel.replace("/", os.sep))
-        d = os.path.join(skill_dir, rel.replace("/", os.sep))
-        os.makedirs(os.path.dirname(d), exist_ok=True)
-        shutil.copy2(s, d)
-        written += 1
+    返回 set(相对路径)；不存在或无法解析一律返回 None —— 调用方必须保守跳过 prune，
+    绝不靠路径前缀猜"这个文件曾经属于技能包"。
+    """
+    path = os.path.join(skill_dir, MANIFEST_NAME)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (ValueError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    files = data.get("files")
+    if not isinstance(files, list):
+        return None
+    out = set()
+    for rel in files:
+        if isinstance(rel, str) and rel.strip():
+            out.add(rel.strip().replace("\\", "/"))
+    return out or None
 
-    # 3. 清理远端已删除的旧文件（保守：只删技能包内同名体系的文件）
+
+def write_manifest(skill_dir, files):
+    """原子写入本次安装清单（先写 .tmp 再 replace，避免半截 JSON）。"""
+    path = os.path.join(skill_dir, MANIFEST_NAME)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(
+                {"version": MANIFEST_VERSION, "files": sorted(set(files))},
+                f,
+                ensure_ascii=False,
+                indent=1,
+            )
+        os.replace(tmp, path)
+        return True
+    except OSError as e:
+        print("警告: 写入 %s 失败: %s（下次更新将跳过旧文件清理）" % (MANIFEST_NAME, e))
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        return False
+
+
+def _is_protected_rel(rel):
+    """清单里若残留 KEEP_DIRS 下的路径，一律不碰（防御老版本产生的脏清单）。"""
+    head = rel.replace("\\", "/").split("/", 1)[0]
+    return head in KEEP_DIRS or rel.replace("\\", "/") in (
+        MANIFEST_NAME, OLD_DATA_TMP, LEGACY_BAK_TMP
+    )
+
+
+def prune_removed_files(skill_dir, manifest, keep):
+    """只删「上次清单里有 且 本次远端包里没有」的文件。
+
+    不在 manifest 里的文件（= 用户自建/第三方投放）一律不碰。
+    """
     removed = []
-    if prune:
-        keep = set(iter_files(src_dir))
-        for rel in iter_files(skill_dir):
-            if rel in keep:
-                continue
-            # 用户自建文件（.lunyu 已排除）也一并保留，只删"曾属于技能包"的
-            if rel.startswith("docs/") or rel.startswith("tests/") \
-                    or rel.startswith("scripts/") or rel.startswith("templates/") \
-                    or rel.startswith("references/") or "/" not in rel:
-                try:
-                    os.remove(os.path.join(skill_dir, rel.replace("/", os.sep)))
-                    removed.append(rel)
-                except OSError:
-                    pass
+    for rel in sorted(manifest):
+        if rel in keep or _is_protected_rel(rel):
+            continue
+        target = os.path.join(skill_dir, rel.replace("/", os.sep))
+        if not os.path.isfile(target):
+            continue
+        try:
+            os.remove(target)
+            removed.append(rel)
+        except OSError:
+            pass
+    return removed
 
-    # 4. 恢复用户数据
-    if backup and os.path.isdir(backup):
+
+# ---------------- 用户数据（.lunyu）搬运 ----------------
+def _swap_dir(src, dst):
+    """同分区原子换名；成功返回 True。dst 必须不存在。"""
+    if not os.path.isdir(src) or os.path.exists(dst):
+        return False
+    os.replace(src, dst)
+    return True
+
+
+def restore_data(old_tmp, data_dir):
+    """把施工期的 .lunyu.old.tmp 换回 .lunyu/（瞬间原子操作）。"""
+    return _swap_dir(old_tmp, data_dir)
+
+
+def rollback_data(old_tmp, data_dir):
+    """失败兜底：把旧数据换回原位，永不抛异常。"""
+    if not os.path.isdir(old_tmp) or os.path.isdir(data_dir):
+        return os.path.isdir(data_dir)
+    try:
+        _swap_dir(old_tmp, data_dir)
+    except OSError as e:
+        print("严重: 回滚失败，用户数据仍留在 %s/（请手动 rename 回 .lunyu）: %s"
+              % (OLD_DATA_TMP, e))
+        return False
+    return True
+
+
+def _recover_tmp_dir(tmp_path, data_dir, label):
+    """回收上一次中断留下的临时目录：数据丢失则救回，数据完好则丢弃残留。"""
+    if not os.path.isdir(tmp_path):
+        return
+    if os.path.isdir(data_dir):
+        print("提示: 清理上次更新残留的 %s（.lunyu 完好）" % label)
+        shutil.rmtree(tmp_path, ignore_errors=True)
+        return
+    print("提示: 上次更新疑似中断，正在从 %s 恢复 .lunyu 数据" % label)
+    try:
+        _swap_dir(tmp_path, data_dir)
+    except OSError as e:
+        print("严重: 无法恢复 %s 里的用户数据: %s" % (label, e))
+
+
+def apply_update(skill_dir, src_dir, prune=True):
+    """用 src_dir 覆盖 skill_dir，返回 (写入文件数, 清理的旧文件列表)。
+
+    数据销毁窗口已消除：全程只用 os.replace 搬动 .lunyu，
+    不做「rmtree + copytree」，失败自动回滚。
+    """
+    data_dir = os.path.join(skill_dir, DATA_DIR_NAME)
+    old_tmp = os.path.join(skill_dir, OLD_DATA_TMP)
+    legacy_bak = os.path.join(skill_dir, LEGACY_BAK_TMP)
+
+    _recover_tmp_dir(legacy_bak, data_dir, LEGACY_BAK_TMP)
+    _recover_tmp_dir(old_tmp, data_dir, OLD_DATA_TMP)
+
+    had_data = os.path.isdir(data_dir)
+    try:
+        # 1. 把用户数据原子挪出施工区（瞬时，磁盘上始终有完整一份）
+        if had_data:
+            try:
+                os.replace(data_dir, old_tmp)
+            except OSError as e:
+                print("警告: 无法移动 .lunyu（%s），改为就地保留（本流程不写入 .lunyu）" % e)
+
+        # 2. 覆盖写入技能文件（iter_files 已排除 KEEP_DIRS）
+        written = []
+        for rel in iter_files(src_dir):
+            s = os.path.join(src_dir, rel.replace("/", os.sep))
+            d = os.path.join(skill_dir, rel.replace("/", os.sep))
+            os.makedirs(os.path.dirname(d), exist_ok=True)
+            shutil.copy2(s, d)
+            written.append(rel)
+
+        # 3. 仅按上次清单清理远端已删文件；无清单则保守跳过
+        removed = []
+        if prune:
+            manifest = read_manifest(skill_dir)
+            if manifest is None:
+                print("提示: 未找到 %s，跳过旧文件清理"
+                      "（老版本升级上来的首次安装，不做猜测，用户自建文件一律保留）"
+                      % MANIFEST_NAME)
+            else:
+                removed = prune_removed_files(skill_dir, manifest, set(written))
+
+        # 4. 恢复用户数据，并确认落位后才算更新成功
+        restore_data(old_tmp, data_dir)
+        if had_data and not os.path.isdir(data_dir):
+            raise RuntimeError("恢复 .lunyu 失败，已触发回滚")
+
+        write_manifest(skill_dir, written)
+        return len(written), removed
+    except BaseException:
+        pending = os.path.isdir(old_tmp)
+        rollback_data(old_tmp, data_dir)
+        if pending and had_data and os.path.isdir(data_dir):
+            print("已回滚：.lunyu/ 已换回原位，用户数据无损（本次更新未生效）")
+        raise
+    finally:
+        # 兜底：任何出口都不允许用户数据滞留在临时目录里
+        if not os.path.isdir(data_dir) and os.path.isdir(old_tmp):
+            rollback_data(old_tmp, data_dir)
         if os.path.isdir(data_dir):
-            shutil.rmtree(data_dir)
-        shutil.copytree(backup, data_dir)
-        shutil.rmtree(backup)
-
-    return written, removed
+            if os.path.isdir(old_tmp):
+                shutil.rmtree(old_tmp, ignore_errors=True)
+            if os.path.isdir(legacy_bak):
+                shutil.rmtree(legacy_bak, ignore_errors=True)
+        stale = os.path.join(skill_dir, MANIFEST_NAME + ".tmp")
+        if os.path.exists(stale):
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
 
 
 # ---------------- 主流程 ----------------
@@ -330,6 +495,7 @@ def main(argv=None):
             shutil.rmtree(tmp, ignore_errors=True)
     except Exception as e:  # noqa: BLE001
         print("错误: 更新失败: %s" % e)
+        print("数据安全: .lunyu/ 用户数据已自动回滚/保持在原位，未丢失")
         print("提示: 也可手动下载 %s/releases 的 zip 覆盖安装" % REPO)
         return 1
 

@@ -8,29 +8,96 @@
 - run() 处理超时/不存在
 - is_windows 判断
 """
+import importlib.util
+import io
+import itertools
 import os
+import shutil
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import scheduler
 
+REAL_SCHEDULER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "scheduler.py")
+_mod_seq = itertools.count()
+
+
+def load_scheduler_at(scripts_dir):
+    """在临时目录里加载一份真实的 scheduler.py。
+
+    __file__ 天然指向该目录，不需要 patch 被测模块本身；
+    这样才能断言「路径解析」而不是断言「文件恰好存在」。
+    """
+    os.makedirs(scripts_dir, exist_ok=True)
+    dst = os.path.join(scripts_dir, "scheduler.py")
+    shutil.copyfile(REAL_SCHEDULER, dst)
+    spec = importlib.util.spec_from_file_location("scheduler_under_test_%d" % next(_mod_seq), dst)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
 
 class PathTest(unittest.TestCase):
-    def test_find_skill_dir(self):
+    """路径解析必须算出「预期的那个具体路径」，而不是只要存在就算过。"""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.scripts = os.path.join(self.tmp, "scripts")
+        self.mod = load_scheduler_at(self.scripts)
+
+    def test_find_skill_dir_is_parent_of_scripts(self):
+        self.assertEqual(self.mod.find_skill_dir(), self.tmp)
+        self.assertEqual(os.path.dirname(self.scripts), self.tmp)
+        # 不能把 scripts 自己当成技能根
+        self.assertNotEqual(self.mod.find_skill_dir(), self.scripts)
+
+    def test_get_report_py_path(self):
+        p = self.mod.get_report_py()
+        self.assertEqual(p, os.path.join(self.tmp, "scripts", "report.py"))
+        self.assertEqual(os.path.basename(p), "report.py")
+        # 父目录必须是技能根下的 scripts/
+        self.assertEqual(os.path.dirname(os.path.dirname(p)), self.tmp)
+        self.assertEqual(os.path.dirname(p), self.scripts)
+
+    def test_get_daily_script_path(self):
+        p = self.mod.get_daily_script()
+        self.assertEqual(p, os.path.join(self.tmp, "scripts", "daily_report.sh"))
+        self.assertEqual(os.path.dirname(p), self.scripts)
+        self.assertNotEqual(p, self.mod.get_report_py())
+
+    def test_paths_follow_relocated_module(self):
+        """挪到另一个目录后路径必须跟着变（证明不是写死常量）。"""
+        other = os.path.realpath(tempfile.mkdtemp())
+        mod2 = load_scheduler_at(os.path.join(other, "scripts"))
+        self.assertEqual(mod2.get_report_py(), os.path.join(other, "scripts", "report.py"))
+        self.assertNotEqual(mod2.get_report_py(), self.mod.get_report_py())
+
+    def test_missing_layout_reports_error(self):
+        """目录结构不对（scripts/report.py 缺失）时必须报错退出，不能静默成功。"""
+        self.assertFalse(os.path.isfile(self.mod.get_report_py()))
+
+        class A:
+            time = "18:00"
+            project = self.tmp
+            author = "me"
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.mod.cmd_install(A())
+        self.assertEqual(rc, 1)
+        self.assertIn("未找到 report.py", buf.getvalue())
+
+    def test_installed_skill_layout_intact(self):
+        """真实安装目录的布局没被改坏（冒烟，防止路径函数悄悄改错）。"""
         d = scheduler.find_skill_dir()
-        self.assertTrue(d.endswith("lunyu"))
-        self.assertTrue(os.path.isdir(os.path.join(d, "scripts")))
-
-    def test_get_report_py(self):
-        p = scheduler.get_report_py()
-        self.assertTrue(os.path.isfile(p))
-
-    def test_get_daily_script(self):
-        p = scheduler.get_daily_script()
-        self.assertTrue(os.path.isfile(p))
+        self.assertEqual(os.path.basename(d), "lunyu")
+        self.assertTrue(os.path.isfile(os.path.join(d, "SKILL.md")))
+        self.assertTrue(os.path.isfile(os.path.join(d, "scripts", "report.py")))
+        self.assertTrue(os.path.isfile(os.path.join(d, "scripts", "daily_report.sh")))
 
 
 class WindowsCmdTest(unittest.TestCase):

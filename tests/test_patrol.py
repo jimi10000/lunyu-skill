@@ -38,6 +38,23 @@ class Base(unittest.TestCase):
         with open(os.path.join(self.lunyu, "lessons.json"), "w", encoding="utf-8") as f:
             json.dump({"next_id": len(lessons) + 1, "lessons": lessons}, f, ensure_ascii=False)
 
+    def write_report(self, name, content):
+        """往 .lunyu/reports/ 下写一份报告。"""
+        d = os.path.join(self.lunyu, "reports")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def write_raw(self, rel_path, content):
+        """写任意文件（含非法 JSON，用来验证容错）。"""
+        p = os.path.join(self.lunyu, rel_path)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    @staticmethod
+    def date_offset(n):
+        return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
+
     @staticmethod
     def days_ago(n):
         return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d %H:%M:%S")
@@ -180,6 +197,125 @@ class OrderAndExitCodeTest(Base):
         self.write_bugs([{"id": "BUG-0001", "priority": "P0", "status": "新建", "title": "崩溃"}])
         rc = patrol.main(["--root", self.root, "--json"])
         self.assertEqual(rc, 1)
+
+    def test_warning_checks_do_not_block(self):
+        """CR 未闭环 / 复盘待办 / 昨日计划 属于警告与提醒，不该把门禁拉红。"""
+        self.write_raw("reviews.json", json.dumps({"reviews": [
+            {"comments": [{"title": "补边界用例", "status": "新建"}]},
+        ]}))
+        self.write_report("summary_2026-01-01.md", "- [ ] 补并发压测\n")
+        self.write_report("日报-%s.md" % self.date_offset(1),
+                          "## 明日计划\n- 重构登录模块\n")
+        rc = patrol.main(["--root", self.root])
+        self.assertEqual(rc, 0)
+
+
+class YesterdayPlanTest(Base):
+    """昨日「明日计划」未兑现 —— 判定要宽松，宁可少报不可误报。"""
+
+    def write_yesterday(self, plan_body):
+        self.write_report("日报-%s.md" % self.date_offset(1),
+                          "# 日报\n\n## 今日完成\n- x\n\n## 明日计划\n%s\n" % plan_body)
+
+    def test_no_yesterday_report_skipped(self):
+        """没有昨天的日报就没得比对，静默跳过。"""
+        self.assertIsNone(patrol.check_yesterday_plan_unfulfilled(self.root))
+
+    def test_placeholder_plan_not_flagged(self):
+        """「（待补充）」这类占位条目不该被当成没兑现。"""
+        self.write_yesterday("- （待补充）")
+        self.assertIsNone(patrol.check_yesterday_plan_unfulfilled(self.root))
+
+    def test_unfulfilled_plan_flagged(self):
+        self.write_yesterday("- 重构登录模块")
+        self.write_report("日报-%s.md" % self.date_offset(0), "今天主要是摸鱼")
+        r = patrol.check_yesterday_plan_unfulfilled(self.root)
+        self.assertIsNotNone(r)
+        self.assertEqual(r[0], "low")
+        self.assertIn("重构登录模块", r[2])
+
+    def test_fulfilled_in_today_report_not_flagged(self):
+        """今天的日报里出现了同一件事，就算兑现。"""
+        self.write_yesterday("- 重构登录模块")
+        self.write_report("日报-%s.md" % self.date_offset(0),
+                          "今天完成了重构登录模块的拆分")
+        self.assertIsNone(patrol.check_yesterday_plan_unfulfilled(self.root))
+
+    def test_fulfilled_by_lessons_not_flagged(self):
+        """宽松匹配：经验库里沾上关键词也算数。"""
+        self.write_yesterday("- 重构登录模块")
+        self.write_lessons([{"id": "L-0001", "scene": "登录模块重构踩坑",
+                             "solution": "先抽接口", "date": self.date_offset(0)}])
+        self.assertIsNone(patrol.check_yesterday_plan_unfulfilled(self.root))
+
+    def test_garbage_report_no_crash(self):
+        """日报内容乱七八糟也不能让巡检崩。"""
+        self.write_report("日报-%s.md" % self.date_offset(1), "\x00\xff 乱码 ## 明日计划\n*  ")
+        self.assertIsNone(patrol.check_yesterday_plan_unfulfilled(self.root))
+
+    def test_plan_items_extracts_only_plan_section(self):
+        content = "# 日报\n## 今日完成\n- 写单测\n## 明日计划\n- 补压测\n"
+        self.assertEqual(patrol.plan_items(content), ["补压测"])
+
+    def test_keywords_splits_chinese_bigram(self):
+        kws = patrol.keywords("重构登录模块")
+        self.assertIn("登录", kws)
+        self.assertIn("模块", kws)
+
+
+class CrCommentsTest(Base):
+    def test_missing_reviews_file_skipped(self):
+        self.assertIsNone(patrol.check_open_cr_comments(self.root))
+
+    def test_open_comments_flagged(self):
+        self.write_raw("reviews.json", json.dumps({"reviews": [
+            {"comments": [{"title": "补边界用例", "status": "新建"}]},
+        ]}))
+        r = patrol.check_open_cr_comments(self.root)
+        self.assertIsNotNone(r)
+        self.assertEqual(r[0], "medium")
+        self.assertIn("补边界用例", r[2])
+
+    def test_closed_comments_not_flagged(self):
+        self.write_raw("reviews.json", json.dumps({"reviews": [
+            {"comments": [{"title": "补边界用例", "status": "已闭环"},
+                          {"title": "改名", "closed": True}]},
+        ]}))
+        self.assertIsNone(patrol.check_open_cr_comments(self.root))
+
+    def test_list_format_supported(self):
+        """reviews.json 也允许直接是意见数组。"""
+        self.write_raw("reviews.json", json.dumps(
+            [{"title": "拆函数", "status": "未处理"}]))
+        r = patrol.check_open_cr_comments(self.root)
+        self.assertIsNotNone(r)
+        self.assertIn("1 条", r[2])
+
+    def test_broken_json_no_crash(self):
+        self.write_raw("reviews.json", "{坏掉的 json")
+        self.assertIsNone(patrol.check_open_cr_comments(self.root))
+
+
+class ReviewTodosTest(Base):
+    def test_no_reports_dir_skipped(self):
+        self.assertIsNone(patrol.check_review_todos(self.root))
+
+    def test_unchecked_todos_flagged(self):
+        self.write_report("summary_2026-01-01.md",
+                          "## 下轮待办\n- [ ] 补并发压测\n- [x] 建立模板\n")
+        r = patrol.check_review_todos(self.root)
+        self.assertIsNotNone(r)
+        self.assertEqual(r[0], "medium")
+        self.assertIn("补并发压测", r[2])
+
+    def test_all_done_not_flagged(self):
+        self.write_report("summary_2026-01-01.md", "- [x] 补并发压测\n")
+        self.assertIsNone(patrol.check_review_todos(self.root))
+
+    def test_non_summary_files_ignored(self):
+        """日报/周报里的 checkbox 不算复盘待办。"""
+        self.write_report("日报-2026-01-01.md", "- [ ] 补压测\n")
+        self.assertIsNone(patrol.check_review_todos(self.root))
 
 
 class ParseDateTest(unittest.TestCase):

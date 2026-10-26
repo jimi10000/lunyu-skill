@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-27
+
+### Added
+
+- **ADR 架构决策记录 `adr.py`**：`new / list / show / supersede / link`，决策落 `.lunyu/decisions/NNNN-*.md` + 索引，方案换人有据可查
+- **提交前门禁可安装**：`preflight.py install-hook`（复用 `core.hooksPath`，已存在先备份）/ `uninstall-hook`
+- **依赖 SBOM**：`preflight.py scan_deps` 扫第三方依赖并落 `.lunyu/sbom.json`
+- **模板补齐至 14 个**：新增 08 交付清单、09 需求变更记录、10 CR 评审意见单、11 事故报告、12 日报、13 周报、14 项目总结
+- **参考文档补齐至 18 份**：新增 extreme-conditions、scope-change、anti-patterns、scale-adaptation、script-index、self-update、adr-usage、report-usage、lessons-usage 等，并让原死文档被正文引用
+- **日报/周报/总结自动聚合**：`report.py`、`release_note.py` 自动聚合历史日报周报（`--no-agg` 可关）
+- **产物可追溯**：`release_note.py --artifact` 算 sha256 入版本存档，回滚预案一并落盘
+- **定时日报**：`scheduler.py` + `daily_report.sh`，到点自动生成并发送
+- **单元测试骨架**：`tests/` 332 用例，跑前自动清 `__pycache__`
+- **上架市场合规**：frontmatter 顶层 `version` 与 `display_name_en`，`&` 加引号避免 YAML 锚点
+
+### Fixed
+
+- **零外部技能依赖（上架审核阻断项）**：正文不再引用任何包外技能及其附属文档（原先指向的三个包外技能与两份外部参考均不在本包内，被判「资产包缺少必需资源」）——改为内置资源索引，包内资产自足，单独安装即可跑完整流水线，离线可用
+- **自更新不再有数据销毁窗口**：`self_update.py` 由 rmtree→copytree 改为原子 `os.replace` 换名，中断可回滚，`.lunyu/` 台账不丢
+- `self_update.sh` 版本解析改顶层优先 + `[[:space:]]`（原正则只读缩进子层，技能市场只读顶层 version）
+- PAT 不再明文写 `.git/config`、不再进 argv，改环境变量 + 临时凭据文件（600）
+- `report.py` / `release_note.py` 补 `sys.exit(main())`（原来失败仍返回 0，CI 门禁形同虚设）
+- 关闭缺陷强制填根因 + 回归验证，否则退出码 1
+- 修 6 条假测试（logkit 同义反复、shell 存在性断言、`sort -V` GNU-only 等），stale `.pyc` 导致的「假全绿」已根治
+
+## [1.1.7] - 2026-10-26
+
+### Added
+
+- **种子经验库**：新增 `references/seed-lessons.json`（12 条通用工程教训：密钥硬编码、反编译 diff 假差异、车机静态 receiver 失效、跨进程 action 先搜常量池、刷包只认 sha256、`&` 在 YAML 是锚点、stale `.pyc` 假全绿、`\s` 在 BSD grep 不支持、动手前先找轮子等），配套 `lessons.py seed` 一键导入，**幂等**（同场景不会重复导入），让项目不从空库起步
+
 ## [1.1.6] - 2026-10-26
 
 ### Added

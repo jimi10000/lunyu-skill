@@ -174,7 +174,7 @@ lunyu/
     ├── patrol.py                       # 主动巡检（自驱力：不等指令自己体检）
     ├── self_update.py                  # 自更新（跨平台，zip 安装也能升）
     └── self_update.sh                  # 自更新入口（委托 .py / bash 兜底）
-└── tests/                         # 单元测试（unittest 零依赖，178 个用例）
+└── tests/                         # 单元测试（unittest 零依赖，332 个用例）
     ├── run_tests.py               # 测试运行入口
     ├── test_flow.py               # flow.py 通道判定
     ├── test_logkit.py             # logkit.py 模板生成
@@ -217,6 +217,9 @@ lunyu/
 ### 自学习：经验库（告诸往而知来者）
 
 ```bash
+# 首次使用：导入内置种子经验（12 条通用工程教训），别从空库起步
+python scripts/lessons.py seed
+
 # 沉淀
 python scripts/lessons.py add --scene "车机静态广播不分发"   --solution "动态注册兜底" --tags "android,车机,广播" --kind 踩坑
 
@@ -247,7 +250,7 @@ python -m unittest discover -s tests -v
 ```
 
 覆盖：通道判定、日志模板生成、密钥扫描、缺陷台账、版本存档、日报/周报/总结、
-定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 178 个用例。
+定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 332 个用例。
 
 > 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 
@@ -263,16 +266,15 @@ python -m unittest discover -s tests -v
 
 敏感路径强制完整通道：`auth/ login/ oauth/ token/ payment/ billing/ migration/ schema/ .env/ config/ Dockerfile/ CI配置/ 依赖清单/ crypto/ *.sql`
 
-## 与现有技能的关系
+## 与外部工具的关系
 
-论语是**流程编排层**，不替代技术实现技能：
+论语是**流程编排层**，不替代技术实现；也不依赖任何外部技能——包内资产自足，单独安装即可跑完整流水线，离线可用。
 
-| 现有技能 | 关系 |
+| 外部工具 | 关系 |
 |---|---|
-| `fullstack-dev` | 互补：lunyu 管流程，fullstack 管技术细节 |
-| `code-review-checklist-hckp` | 已被覆盖：lunyu 有更全的 7 维度 CR |
-| `secure-audit-suite` | 互补：lunyu 做提交前扫密钥，secure-audit 做深度审计 |
-| `frontend-dev` | 互补：不同领域 |
+| CodeQL / Semgrep 等扫描器 | 互补：lunyu 做提交前扫密钥与门禁编排，深度审计交给用户环境里的专业扫描器 |
+| pytest / JUnit 等测试框架 | 互补：lunyu 定测试金字塔与覆盖率口径，执行交给框架 |
+| 设计工具链 | 不同领域，不在 lunyu 流程范畴 |
 
 ## 贡献
 

@@ -1,0 +1,101 @@
+{
+  "note": "种子经验库：通用工程教训，安装后可用 python scripts/lessons.py seed 一键导入到当前项目。均为跨项目可复用的踩坑结论，导入后按 hits 自动排序，可自行删改。",
+  "lessons": [
+    {
+      "kind": "禁区",
+      "scene": "提交前扫密钥",
+      "problem": "把 token/密码硬编码进脚本后直接 commit 并开源出去",
+      "solution": "所有凭据一律走环境变量或命令行参数传入；提交前跑 preflight.py 扫描，命中即阻断",
+      "tags": ["安全", "密钥", "提交"],
+      "source": "通用工程实践"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "反编译产物做版本对比",
+      "problem": "直接 diff 反编译文件显示「整个文件都变了」，产生上千行假差异",
+      "solution": "先归一化行尾符（apktool 产物是 CRLF，本地编辑过的是 LF），再按 .method/.end method 切片成 dict 按方法名比对；同时看「只在 A 有」和「只在 B 有」",
+      "tags": ["反编译", "diff", "对比"],
+      "source": "Android 逆向实战"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "Android 车机新增静态组件",
+      "problem": "manifest 里新增静态 receiver，PackageManager 会静默忽略，pm query-receivers 查不到，广播根本不分发",
+      "solution": "必须走动态注册兜底（Application.onCreate 里 registerReceiver）；验证用 pm query-receivers 或实发广播，dumpsys package 的 Receiver Resolver Table 不可信",
+      "tags": ["android", "车机", "广播", "receiver"],
+      "source": "车机实测"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "Android 给别的 app 发广播",
+      "problem": "用 Context.getPackageName() 拿包名去 setPackage()，结果只发给了自己；「发送成功」的日志会骗人",
+      "solution": "给别的应用发广播必须硬编码目标包名；验收标准是对端真的收到，不是发送方返回成功",
+      "tags": ["android", "广播", "跨进程"],
+      "source": "Android 实战"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "更换跨进程通信通道",
+      "problem": "换了 action 名或通信方式，但从没去目标 APK 里确认对方到底监听什么，白改一场",
+      "solution": "改通道前先去目标 APK 常量池里搜 action / extras key，确认对方真的监听；别凭印象改",
+      "tags": ["android", "跨进程", "逆向"],
+      "source": "Android 实战"
+    },
+    {
+      "kind": "结论",
+      "scene": "判断升级/刷包是否真的成功",
+      "problem": "用「进程 pid 变了」或「文件大小变了」判断刷包成功，结果两个版本字节数完全相同，判断完全失效",
+      "solution": "只认哈希：装完立刻 sha256sum 复核，跟本地产物比对",
+      "tags": ["验证", "刷机", "哈希"],
+      "source": "车机实测"
+    },
+    {
+      "kind": "禁区",
+      "scene": "造升级包 / metadata 编写",
+      "problem": "凭印象重写 metadata 结构，本地校验全绿，装机才报「包无效或损坏」",
+      "solution": "从上一版已验证可装的 metadata 复制改字段，不要重写；本地校验器往往不覆盖结构字段",
+      "tags": ["升级包", "metadata", "刷机"],
+      "source": "车机实测"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "Windows 下用 bash 调 python",
+      "problem": "subprocess.run([\"bash\", ...]) 在 Windows 会被 WSL 拦截，输出一堆看不懂的错",
+      "solution": "Windows 分支直接调 python 可执行文件，绕开 bash 解析",
+      "tags": ["windows", "subprocess", "跨平台"],
+      "source": "实战"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "YAML frontmatter 里写英文值",
+      "problem": "值里含 & 被当成锚点符号解析出错（如 R&D）",
+      "solution": "含 & * ! 等特殊字符的值一律加双引号",
+      "tags": ["yaml", "配置", "元数据"],
+      "source": "实战"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "Python 单元测试「全绿」但不放心",
+      "problem": "__pycache__ 里的 stale .pyc 让 unittest 加载到旧版测试代码，坏测试伪装成通过，测试数也对不上",
+      "solution": "跑测试前先清 __pycache__；测试数量突然变化时重点怀疑缓存",
+      "tags": ["python", "测试", "缓存"],
+      "source": "实战"
+    },
+    {
+      "kind": "踩坑",
+      "scene": "grep 正则跨平台兼容",
+      "problem": "grep -E 用 \\s 表示空白，在 BSD/macOS grep 下不被支持，匹配不到导致变量为空",
+      "solution": "用 POSIX 安全的 [[:space:]]，别用 \\s",
+      "tags": ["shell", "grep", "跨平台"],
+      "source": "实战"
+    },
+    {
+      "kind": "结论",
+      "scene": "接到新需求先找轮子",
+      "problem": "从零自研一套方案，结果发现成熟方案早就存在，还踩了别人踩过的坑",
+      "solution": "动手前先搜：技能市场 / GitHub 开源仓库（看 star 和协议）/ 本地已有技能；有现成的直接采用，自研是最后手段",
+      "tags": ["预研", "选型", "效率"],
+      "source": "通用工程实践"
+    }
+  ]
+}

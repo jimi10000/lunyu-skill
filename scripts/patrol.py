@@ -15,6 +15,9 @@
   4. [中]   有版本记录但 CHANGELOG 没跟上
   5. [低]   经验库长期没沉淀（踩过的坑没入库）
   6. [低]   工作区有未提交改动
+  7. [中]   CR 意见提了没闭环
+  8. [中]   复盘纪要里的待办没打勾
+  9. [低]   昨日「明日计划」没兑现
 
 退出码: 0=无阻断项 / 1=存在阻断项（有未关闭 P0/P1）
 适合挂定时任务或 CI，作为项目健康度门禁。
@@ -27,6 +30,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 
@@ -209,6 +213,143 @@ def check_uncommitted(root):
             "  提交前先扫: python scripts/preflight.py" % len(lines))
 
 
+# ---------------- 产出闭环检查（有产出但没闭环） ----------------
+CR_CLOSED = ("已闭环", "已解决", "已完成", "关闭", "closed", "resolved", "done")
+PLAN_SOURCES = ("lessons.json", "bugs.json", "releases.json")
+
+
+def read_text(path):
+    """读文本文件，缺失或读不了返回空串 —— 巡检不能因为读文件失败就趴下。"""
+    if not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def plan_items(content):
+    """从日报正文抽取「明日计划」条目，抽不到返回空列表。"""
+    items, in_section = [], False
+    for line in content.splitlines():
+        s = line.strip()
+        if s.startswith("#"):
+            in_section = "明日计划" in s
+            continue
+        if not in_section or not s.startswith(("-", "*")):
+            continue
+        text = s.lstrip("-* ").strip()
+        if not text or text in ("无", "-") or "待补充" in text:
+            continue  # 占位条目没有兑现与否的意义
+        items.append(text)
+    return items
+
+
+def keywords(text):
+    """抽关键词：中文整串 + 2-gram，英文数字整串（≥2 字符）。"""
+    kws = []
+    for run in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+        kws.append(run)
+        if len(run) > 2:
+            kws.extend(run[i:i + 2] for i in range(len(run) - 1))
+    kws.extend(re.findall(r"[A-Za-z0-9_.]{2,}", text))
+    return kws
+
+
+def check_yesterday_plan_unfulfilled(root):
+    """昨天写的「明日计划」没兑现 —— 日报就此沦为废纸。
+
+    兑现判定放宽：计划条目任一关键词在今日日报 / 经验库 / 缺陷台账 /
+    版本记录里出现过就算数。宁可少报，不可误报。
+    """
+    rep_dir = os.path.join(root, ".lunyu", "reports")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    plans = plan_items(read_text(os.path.join(rep_dir, "日报-%s.md" % yesterday)))
+    if not plans:
+        return None
+
+    corpus = read_text(os.path.join(rep_dir, "日报-%s.md" % today_str())).lower()
+    for name in PLAN_SOURCES:
+        data = read_json(os.path.join(root, ".lunyu", name), None)
+        if data:
+            corpus += "\n" + json.dumps(data, ensure_ascii=False).lower()
+
+    pending = []
+    for p in plans:
+        kws = keywords(p)
+        if not kws:
+            continue  # 抽不出关键词无从判断，跳过而不是误报
+        if not any(k.lower() in corpus for k in kws):
+            pending.append(p)
+    if not pending:
+        return None
+    lines = ["昨日（%s）列了 %d 条明日计划，其中 %d 条今天没找到对应产出："
+             % (yesterday, len(plans), len(pending))]
+    for p in pending[:10]:
+        lines.append("  - %s" % p)
+    lines.append("  处理: 能做的今天补上，做不了的挪进今天的计划或直接砍掉")
+    return ("low", "昨日计划未兑现", "\n".join(lines))
+
+
+def check_open_cr_comments(root):
+    """CR 意见提完没人闭环 —— 评审等于白开。"""
+    data = read_json(os.path.join(root, ".lunyu", "reviews.json"), None)
+    if not data:
+        return None
+    reviews = data if isinstance(data, list) else (data.get("reviews") or data.get("items") or [])
+    pending, samples = 0, []
+    for rv in reviews:
+        if not isinstance(rv, dict):
+            continue
+        comments = rv["comments"] if isinstance(rv.get("comments"), list) else [rv]
+        for c in comments:
+            if not isinstance(c, dict):
+                continue
+            if c.get("closed") or c.get("resolved"):
+                continue
+            if str(c.get("status", "")).strip() in CR_CLOSED:
+                continue
+            pending += 1
+            brief = c.get("title") or c.get("comment") or c.get("content") or ""
+            if brief and len(samples) < 10:
+                samples.append(str(brief)[:40])
+    if not pending:
+        return None
+    lines = ["有 %d 条 CR 意见还没闭环，评审意见不落地等于没评审：" % pending]
+    for s in samples:
+        lines.append("  - %s" % s)
+    lines.append("  处理: 逐条回复并落地修改，闭环后在 .lunyu/reviews.json 标记为已闭环")
+    return ("medium", "CR 意见未闭环", "\n".join(lines))
+
+
+def check_review_todos(root):
+    """复盘纪要里列的待办没打勾 —— 复盘就成了走过场。"""
+    rep_dir = os.path.join(root, ".lunyu", "reports")
+    if not os.path.isdir(rep_dir):
+        return None
+    try:
+        files = sorted(f for f in os.listdir(rep_dir)
+                       if f.startswith("summary_") and f.endswith(".md"))
+    except OSError:
+        return None
+    pending, samples = 0, []
+    for name in files:
+        for line in read_text(os.path.join(rep_dir, name)).splitlines():
+            s = line.strip()
+            if s.startswith("- [ ]") or s.startswith("* [ ]"):
+                pending += 1
+                if len(samples) < 10:
+                    samples.append(s[6:].strip()[:40])
+    if not pending:
+        return None
+    lines = ["复盘纪要里还有 %d 条待办没打勾（共 %d 份纪要）：" % (pending, len(files))]
+    for s in samples:
+        lines.append("  - %s" % s)
+    lines.append("  处理: 完成的改成 - [x]，不做的明确删掉，剩下的排进今天的计划")
+    return ("medium", "复盘待办未闭环", "\n".join(lines))
+
+
 LEVEL_ORDER = {"blocking": 0, "high": 1, "medium": 2, "low": 3}
 LEVEL_LABEL = {
     "blocking": "[阻断]",
@@ -227,6 +368,9 @@ def run_checks(root, due_days, stale_days):
         lambda: check_changelog_behind(root),
         lambda: check_lessons_stale(root, stale_days),
         lambda: check_uncommitted(root),
+        lambda: check_open_cr_comments(root),
+        lambda: check_review_todos(root),
+        lambda: check_yesterday_plan_unfulfilled(root),
     ):
         try:
             r = fn()

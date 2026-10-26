@@ -9,11 +9,14 @@
 - CHANGELOG 生成与插入顺序
 - rollback 标记 rolled_back
 """
+import hashlib
 import json
 import os
 import sys
 import tempfile
 import unittest
+from io import StringIO
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
@@ -106,6 +109,98 @@ class CollectBugsTest(unittest.TestCase):
             ]}, f, ensure_ascii=False)
         blockers = release_note.open_blockers(root)
         self.assertEqual([b["id"] for b in blockers], ["B1"])
+
+
+def write_artifact(root, name, data=b"apk-binary"):
+    p = os.path.join(root, name)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(data)
+    return p
+
+
+class ArtifactTest(unittest.TestCase):
+    """产物摘要入库存档 + 回滚预案落盘与回显"""
+
+    def read_store(self, root):
+        with open(os.path.join(root, ".lunyu", "releases.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def tag_with(self, root, version, **kw):
+        buf = StringIO()
+        with patch.object(release_note, "run_git", return_value=(0, "main", "")), \
+             patch.object(release_note, "check_dirty", return_value=False):
+            with redirect_stdout(buf):
+                release_note.cmd_tag(make_args(root, version=version, **kw))
+        return buf.getvalue()
+
+    def test_sha256_file(self):
+        root = make_root()
+        p = write_artifact(root, "build/app.apk", b"hello-lunyu")
+        self.assertEqual(release_note.sha256_file(p),
+                         hashlib.sha256(b"hello-lunyu").hexdigest())
+
+    def test_artifact_stored_with_sha256(self):
+        root = make_root()
+        apk = write_artifact(root, "build/app.apk", b"binary-123")
+        self.tag_with(root, "1.0.0", artifact=[apk], summary="带产物发布")
+        rec = self.read_store(root)["releases"][0]
+        self.assertEqual(len(rec["artifacts"]), 1)
+        a = rec["artifacts"][0]
+        self.assertEqual(a["name"], "app.apk")
+        self.assertEqual(a["size"], len(b"binary-123"))
+        self.assertEqual(a["sha256"], hashlib.sha256(b"binary-123").hexdigest())
+
+    def test_multiple_artifacts_and_missing_file(self):
+        root = make_root()
+        a1 = write_artifact(root, "build/app.apk", b"aaa")
+        a2 = write_artifact(root, "build/app.map", b"bbb")
+        out = self.tag_with(root, "1.0.0", artifact=[a1, a2, os.path.join(root, "nope.apk")])
+        rec = self.read_store(root)["releases"][0]
+        self.assertEqual([x["name"] for x in rec["artifacts"]], ["app.apk", "app.map"])
+        self.assertIn("nope.apk", out)  # 缺失产物只告警，不中断打版
+
+    def test_no_artifact_backward_compatible(self):
+        root = make_root()
+        self.tag_with(root, "1.0.0")
+        rec = self.read_store(root)["releases"][0]
+        self.assertEqual(rec["artifacts"], [])
+        self.assertIn("rollback_plan", rec)
+
+    def test_rollback_plan_persisted(self):
+        root = make_root()
+        apk = write_artifact(root, "build/app.apk", b"ccc")
+        self.tag_with(root, "1.0.0", artifact=[apk])
+        plan = self.read_store(root)["releases"][0]["rollback_plan"]
+        self.assertEqual(plan["target"], "1.0.0")
+        self.assertTrue(any("git tag -d v1.0.0" in c for c in plan["commands"]))
+        self.assertEqual(plan["impact"]["branch"], "main")
+        self.assertIn("git log --oneline -5", plan["verify"])
+        # 校验方式里带上产物摘要，方便回滚后比对
+        self.assertTrue(any("app.apk" in v and plan["commands"] is not None
+                            and hashlib.sha256(b"ccc").hexdigest() in v
+                            for v in plan["verify"]))
+
+    def test_rollback_plan_has_prev_version(self):
+        root = make_root()
+        self.tag_with(root, "1.0.0")
+        self.tag_with(root, "1.1.0")
+        plan = self.read_store(root)["releases"][1]["rollback_plan"]
+        self.assertTrue(any("v1.0.0" in c for c in plan["commands"]))
+        self.assertIn("回退到版本 1.0.0", plan["impact"]["note"])
+
+    def test_show_echoes_artifacts_and_plan(self):
+        root = make_root()
+        apk = write_artifact(root, "build/app.apk", b"ddd")
+        self.tag_with(root, "2.0.0", artifact=[apk])
+        buf = StringIO()
+        with redirect_stdout(buf):
+            release_note.cmd_show(make_args(root, version="2.0.0"))
+        out = buf.getvalue()
+        self.assertIn(hashlib.sha256(b"ddd").hexdigest(), out)
+        self.assertIn("app.apk", out)
+        self.assertIn("rollback_plan", out)
+        self.assertIn("git log --oneline -5", out)
 
 
 class TagTest(unittest.TestCase):

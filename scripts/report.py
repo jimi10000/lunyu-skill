@@ -23,10 +23,18 @@ report.py — 项目总结 / 日报 / 周报 自动生成
     # 自定义正文追加（命令行传多段，或从文件读）
     python scripts/report.py daily --body "今天完成了XX" --body "修了YY bug"
 
+    # 关闭聚合（周报不读本周日报、总结不读周报）
+    python scripts/report.py weekly --no-agg
+    python scripts/report.py summary --project "项目名" --no-agg
+
 数据来源（自动读取，缺省则留空不报错）:
     .lunyu/bugs.json       缺陷台账（P0-P3、状态、今日/本周关闭数）
     .lunyu/releases.json   版本存档（今日/本周 tag）
     .lunyu/CHANGELOG.md    变更日志（今日/本周条目）
+    .lunyu/reports/*.md    已写好的报告（周报自动聚合本周日报，总结自动聚合周报）
+
+    聚合策略：用户手写（--body）在前，自动聚合的内容追加在对应章节末尾，
+    并以「（自动聚合自本周日报）/（自动聚合自周报）」标注来源；缺省打开，--no-agg 关闭。
 
 输出:
     .lunyu/reports/项目总结-YYYYMMDD.md
@@ -161,12 +169,165 @@ def summarize_releases(releases, date_str):
     }
 
 
+# ---------- 报告聚合（周报吃本周日报 / 总结吃周报） ----------
+# 「好记性不如烂笔头」不能断：写过的报告要能被下一层报告读到，而不是人手工重填。
+AGG_MARKER_WEEKLY = "（自动聚合自本周日报）"
+AGG_MARKER_SUMMARY = "（自动聚合自周报）"
+
+# 聚合小节：聚合键 -> 标题里出现任一关键词即视为该小节
+AGG_SECTION_KEYS = {
+    "收获": ("收获", "今日完成", "本周完成", "主要成果"),
+    "失误与改进": ("失误与改进", "失误", "教训", "改进"),
+    "明日计划": ("明日计划", "下周计划", "遗留事项"),
+}
+
+# 已生成报告的文件名：日报带日期可按周过滤，周报不要求日期格式
+DAILY_FILE_RE = re.compile(r"^日报-(\d{4}-\d{2}-\d{2})\.md$")
+WEEKLY_FILE_RE = re.compile(r"^周报-.+\.md$")
+
+# 来源报告小节 -> 目标草稿章节
+WEEKLY_AGG_TARGETS = (
+    ("收获", "## 本周完成"),
+    ("失误与改进", "## 风险与阻塞"),
+    ("明日计划", "## 下周计划"),
+)
+SUMMARY_AGG_TARGETS = (
+    ("收获", "## 三、主要成果"),
+    ("失误与改进", "## 四、经验与教训（吾日三省）"),
+    ("明日计划", "## 五、遗留事项"),
+)
+
+
+def extract_sections(text):
+    """从一篇报告正文里按标题抽取可聚合小节的条目。
+
+    返回 {聚合键: [条目, ...]}（去重占位符、去列表符号）。格式不符返回空条目，不抛异常。
+    """
+    out = {k: [] for k in AGG_SECTION_KEYS}
+    lines = str(text).splitlines()
+    placeholder = ("-", "无", "暂无", "待补充")
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if not s.startswith("#"):
+            continue
+        title = s.lstrip("#").strip()
+        for key, aliases in AGG_SECTION_KEYS.items():
+            if not any(a in title for a in aliases):
+                continue
+            for nxt in lines[i + 1:]:
+                n = nxt.strip()
+                if n.startswith("#"):
+                    break
+                item = n[2:].strip() if n.startswith("- ") else n
+                if item.startswith("[ ] "):
+                    item = item[4:].strip()
+                if not item or item in placeholder or "（待补充" in item:
+                    continue
+                out[key].append(item)
+            break
+    return out
+
+
+def match_reports(pattern, within=None):
+    """扫描 .lunyu/reports/ 下匹配文件名正则的报告。
+
+    within=(起, 止) 时只保留日期落在区间内的日报。返回 [(文件名, date|None), ...]，按文件名升序。
+    目录不存在或无权限一律返回空列表。
+    """
+    if not os.path.isdir(REPORTS_DIR):
+        return []
+    try:
+        names = sorted(os.listdir(REPORTS_DIR))
+    except OSError:
+        return []
+    hits = []
+    for name in names:
+        m = pattern.match(name)
+        if not m:
+            continue
+        day = None
+        if m.groups():
+            try:
+                day = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+            except ValueError:
+                day = None
+        if within and day and not (within[0] <= day <= within[1]):
+            continue
+        hits.append((name, day))
+    return hits
+
+
+def aggregate_reports(pattern, within=None):
+    """读取已生成的报告并抽取可聚合小节。
+
+    返回 ({聚合键: [(来源标签, [条目...]), ...]}, 命中篇数, 跳过篇数)。
+    目录为空、文件打不开、编码异常、格式不匹配都只跳过，绝不向上抛异常。
+    """
+    aggs = {k: [] for k in AGG_SECTION_KEYS}
+    hit = skipped = 0
+    for name, _day in match_reports(pattern, within):
+        try:
+            with open(os.path.join(REPORTS_DIR, name), "r", encoding="utf-8") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError, ValueError):
+            skipped += 1
+            continue
+        try:
+            secs = extract_sections(text)
+        except Exception:
+            skipped += 1
+            continue
+        hit += 1
+        label = name.rsplit(".", 1)[0]
+        for key in AGG_SECTION_KEYS:
+            items = secs.get(key) or []
+            if items:
+                aggs[key].append((label, items))
+    return aggs, hit, skipped
+
+
+def section_end(lines, start_idx, level):
+    """标题行 start_idx 所在小节的正文结束位置（下一个同级/更高级标题或文件末），跳过尾部空行。"""
+    end = len(lines)
+    for i in range(start_idx + 1, len(lines)):
+        s = lines[i].lstrip()
+        if s.startswith("#") and len(s) - len(s.lstrip("#")) <= level:
+            end = i
+            break
+    while end > start_idx and lines[end - 1].strip() == "":
+        end -= 1
+    return end
+
+
+def merge_aggregated(lines, targets, aggs, marker):
+    """把聚合内容按 targets 合并到 lines：用户手写内容在前，聚合内容追加在该章节末尾。"""
+    for key, heading in targets:
+        blocks = aggs.get(key) or []
+        if not blocks:
+            continue
+        idx = None
+        for i, l in enumerate(lines):
+            if l.strip() == heading:
+                idx = i
+                break
+        if idx is None:
+            continue
+        level = len(heading) - len(heading.lstrip("#"))
+        pos = section_end(lines, idx, level)
+        insert = ["", f"{'#' * (level + 1)} {marker}{key}"]
+        for label, items in blocks:
+            for it in items:
+                insert.append(f"- [{label}] {it}")
+        lines[pos:pos] = insert
+    return lines
+
+
 # ---------- 报告生成 ----------
 def esc(text):
     return str(text).replace("\n", " ").strip()
 
 
-def gen_summary(project, author, body_blocks):
+def gen_summary(project, author, body_blocks, agg=True):
     today = date.today().isoformat()
     bugs = load_json(BUGS_FILE)
     rel = load_json(RELEASES_FILE)
@@ -243,6 +404,19 @@ def gen_summary(project, author, body_blocks):
         lines.append("- （待补充）")
     lines.append("")
 
+    if agg:
+        aggs, hit, skipped = aggregate_reports(WEEKLY_FILE_RE)
+        merged = sum(len(v) for v in aggs.values())
+        if merged:
+            merge_aggregated(lines, SUMMARY_AGG_TARGETS, aggs, AGG_MARKER_SUMMARY)
+            print(f"[聚合] 已合并 {hit} 篇周报的 {merged} 段内容到对应章节")
+        elif hit:
+            print(f"[聚合] 找到 {hit} 篇周报但无可聚合小节，已跳过")
+        else:
+            print("[聚合] 未找到周报（.lunyu/reports/周报-*.md），已跳过")
+        if skipped:
+            print(f"[聚合] {skipped} 篇报告无法读取/格式不符，已跳过")
+
     return "\n".join(lines), f"项目总结-{today.replace('-', '')}.md"
 
 
@@ -297,7 +471,7 @@ def gen_daily(project, author, body_blocks, date_str):
     return "\n".join(lines), f"日报-{date_str}.md"
 
 
-def gen_weekly(project, author, body_blocks, date_str):
+def gen_weekly(project, author, body_blocks, date_str, agg=True):
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
@@ -349,9 +523,22 @@ def gen_weekly(project, author, body_blocks, date_str):
     if bug_sum and bug_sum["open_p0p1"]:
         for x in bug_sum["open_p0p1"]:
             lines.append(f"- [ ] {x}")
-    else:
-        lines.append("- 无")
-    lines.append("")
+        else:
+            lines.append("- 无")
+        lines.append("")
+
+    if agg:
+        aggs, hit, skipped = aggregate_reports(DAILY_FILE_RE, (monday, sunday))
+        merged = sum(len(v) for v in aggs.values())
+        if merged:
+            merge_aggregated(lines, WEEKLY_AGG_TARGETS, aggs, AGG_MARKER_WEEKLY)
+            print(f"[聚合] 已合并本周 {hit} 篇日报的 {merged} 段内容到对应章节")
+        elif hit:
+            print(f"[聚合] 本周（{week_label}）{hit} 篇日报无可聚合小节，已跳过")
+        else:
+            print(f"[聚合] 本周（{week_label}）无日报，已跳过")
+        if skipped:
+            print(f"[聚合] {skipped} 篇报告无法读取/格式不符，已跳过")
 
     return "\n".join(lines), f"周报-{d.isoformat()}.md"
 
@@ -365,6 +552,7 @@ def main():
     p_summary.add_argument("--project", required=True)
     p_summary.add_argument("--author", default="")
     p_summary.add_argument("--body", action="append", default=[])
+    p_summary.add_argument("--no-agg", action="store_true", help="关闭周报聚合（不自动读取周报）")
 
     p_daily = sub.add_parser("daily", help="日报")
     p_daily.add_argument("--date", default=date.today().isoformat())
@@ -377,6 +565,7 @@ def main():
     p_weekly.add_argument("--project", default="")
     p_weekly.add_argument("--author", default="")
     p_weekly.add_argument("--body", action="append", default=[])
+    p_weekly.add_argument("--no-agg", action="store_true", help="关闭日报聚合（不自动读取本周日报）")
 
     p_list = sub.add_parser("list", help="列出已生成报告")
     args = ap.parse_args()
@@ -384,30 +573,42 @@ def main():
     if args.cmd == "list":
         if not os.path.isdir(REPORTS_DIR):
             print("暂无报告")
-            return
-        for name in sorted(os.listdir(REPORTS_DIR), reverse=True):
-            print(name)
-        return
+            return 0
+        try:
+            for name in sorted(os.listdir(REPORTS_DIR), reverse=True):
+                print(name)
+        except OSError as e:
+            print(f"错误: 读取报告目录失败: {e}", file=sys.stderr)
+            return 1
+        return 0
 
-    os.makedirs(REPORTS_DIR, exist_ok=True)
+    try:
+        os.makedirs(REPORTS_DIR, exist_ok=True)
 
-    if args.cmd == "summary":
-        content, fname = gen_summary(args.project, args.author, args.body)
-    elif args.cmd == "daily":
-        content, fname = gen_daily(args.project, args.author, args.body, args.date)
-    elif args.cmd == "weekly":
-        content, fname = gen_weekly(args.project, args.author, args.body, args.date)
-    else:
-        ap.print_help()
-        return
+        if args.cmd == "summary":
+            content, fname = gen_summary(args.project, args.author, args.body,
+                                         agg=not args.no_agg)
+        elif args.cmd == "daily":
+            content, fname = gen_daily(args.project, args.author, args.body, args.date)
+        elif args.cmd == "weekly":
+            content, fname = gen_weekly(args.project, args.author, args.body, args.date,
+                                        agg=not args.no_agg)
+        else:
+            ap.print_help()
+            return 1
 
-    path = os.path.join(REPORTS_DIR, fname)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+        path = os.path.join(REPORTS_DIR, fname)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+    except OSError as e:
+        print(f"错误: 报告生成失败: {e}", file=sys.stderr)
+        return 1
+
     print(f"报告已生成: {path}")
     print("---")
     print(content)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

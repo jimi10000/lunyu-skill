@@ -4,11 +4,16 @@
 存储位置: <项目根>/.lunyu/bugs.json
 单号格式: BUG-0001 递增
 
+关闭门禁(不迁怒，不贰过):
+  状态改为「关闭」时必须填 root_cause 与 regression，
+  否则不算闭环（防复发证据为零的关闭，等于允许同类缺陷再犯）。
+  确属无法复现的场景用 --force 强行关闭。
+
 用法:
   add      新建缺陷工单
   list     列出缺陷(可筛选)
   show     查看单个缺陷详情
-  update   修改状态/优先级/根因
+  update   修改状态/优先级/根因/回归用例
   stats    统计概览(含 P0/P1 门禁校验)
   export   导出 markdown 表格
 """
@@ -44,10 +49,20 @@ def ledger_path(root=None):
 
 
 def load(path):
+    """读台账。文件不存在/坏 JSON/结构异常都不许崩，退化为空台账。"""
     if not os.path.exists(path):
         return {"next_id": 1, "bugs": []}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (ValueError, OSError) as e:
+        print(f"警告: 台账解析失败({e})，按空台账处理: {path}", file=sys.stderr)
+        return {"next_id": 1, "bugs": []}
+    if not isinstance(data, dict) or not isinstance(data.get("bugs"), list):
+        print(f"警告: 台账格式异常，按空台账处理: {path}", file=sys.stderr)
+        return {"next_id": 1, "bugs": []}
+    data.setdefault("next_id", len(data["bugs"]) + 1)
+    return data
 
 
 def save(path, data):
@@ -59,6 +74,37 @@ def save(path, data):
 
 def now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ---------------- 关闭门禁 ----------------
+def missing_evidence(bug, regression):
+    """返回关闭时缺失的防复发证据项: 根因 + 回归用例。"""
+    missing = []
+    root_cause = (bug.get("root_cause") or "").strip()
+    if not root_cause or root_cause == "未定":
+        missing.append("root_cause(根因)")
+    if not (regression or "").strip():
+        missing.append("regression(回归用例)")
+    return missing
+
+
+def reject_close(bug_id, missing):
+    """阻断关闭并给出补全指引，退出码 1。"""
+    print(f"【关闭门禁: 未通过】{bug_id} 关闭必须填 root_cause 与 regression，否则不算闭环")
+    print(f"  缺失: {', '.join(missing)}")
+    print(f"  补全: python scripts/bug_ledger.py update {bug_id} "
+          f"--root-cause 编码疏漏 --regression \"用例名或命令\"")
+    print("  确属无法复现/不适用: 追加 --force 强行关闭（需承担复发风险）")
+    sys.exit(1)
+
+
+def check_close(args, bug, regression):
+    """状态改为关闭前校验防复发证据; --force 可豁免。"""
+    if getattr(args, "force", False):
+        return
+    missing = missing_evidence(bug, regression)
+    if missing:
+        reject_close(bug.get("id", ""), missing)
 
 
 def cmd_add(args):
@@ -74,11 +120,16 @@ def cmd_add(args):
         "expected": args.expected or "",
         "related_pr": args.related_pr or "",
         "related_version": args.related_version or "",
-        "root_cause": "未定",
+        "root_cause": args.root_cause or "未定",
+        "regression": args.regression or "",
         "created_at": now(),
         "updated_at": now(),
         "history": [{"at": now(), "status": args.status, "note": "创建"}],
     }
+    # 直接以「关闭」状态登记同样要留防复发证据
+    if bug["status"] == "关闭":
+        check_close(args, bug, bug["regression"])
+        bug["closed_at"] = now()
     data["bugs"].append(bug)
     data["next_id"] += 1
     save(path, data)
@@ -123,16 +174,6 @@ def cmd_update(args):
     data = load(path)
     for b in data["bugs"]:
         if b["id"].upper() == args.id.upper():
-            if args.status:
-                if args.status not in STATUSES:
-                    print(f"非法状态, 可选: {', '.join(STATUSES)}")
-                    sys.exit(1)
-                b["status"] = args.status
-                # 关闭时记录 closed_at，重新打开时清除
-                if args.status == "关闭":
-                    b["closed_at"] = now()
-                else:
-                    b.pop("closed_at", None)
             if args.priority:
                 if args.priority not in PRIORITIES:
                     print(f"非法优先级, 可选: {', '.join(PRIORITIES)}")
@@ -140,6 +181,21 @@ def cmd_update(args):
                 b["priority"] = args.priority
             if args.root_cause:
                 b["root_cause"] = args.root_cause
+            if args.regression:
+                b["regression"] = args.regression
+            if args.status:
+                if args.status not in STATUSES:
+                    print(f"非法状态, 可选: {', '.join(STATUSES)}")
+                    sys.exit(1)
+                # 关闭前校验: 根因与回归用例缺一不可（--force 豁免）
+                if args.status == "关闭":
+                    check_close(args, b, b.get("regression", ""))
+                b["status"] = args.status
+                # 关闭时记录 closed_at，重新打开时清除
+                if args.status == "关闭":
+                    b["closed_at"] = now()
+                else:
+                    b.pop("closed_at", None)
             if args.related_version:
                 b["related_version"] = args.related_version
             if args.related_pr:
@@ -224,6 +280,9 @@ def main():
     a.add_argument("--expected", help="期望行为")
     a.add_argument("--related-pr")
     a.add_argument("--related-version")
+    a.add_argument("--root-cause", choices=ROOT_CAUSES, help="根因(关闭时必填)")
+    a.add_argument("--regression", help="回归用例: 用例名或命令(关闭时必填)")
+    a.add_argument("--force", action="store_true", help="跳过关闭门禁强行关闭(无法复现场景)")
     a.set_defaults(func=cmd_add)
 
     l = sub.add_parser("list", help="列出缺陷")
@@ -241,9 +300,11 @@ def main():
     u.add_argument("--status", choices=STATUSES)
     u.add_argument("--priority", choices=PRIORITIES)
     u.add_argument("--root-cause", choices=ROOT_CAUSES)
+    u.add_argument("--regression", help="回归用例: 用例名或命令(关闭时必填)")
     u.add_argument("--related-version", help="关联版本, 如 v1.2.0")
     u.add_argument("--related-pr", help="关联PR")
     u.add_argument("--note")
+    u.add_argument("--force", action="store_true", help="跳过关闭门禁强行关闭(无法复现场景)")
     u.set_defaults(func=cmd_update)
 
     st = sub.add_parser("stats", help="统计+门禁校验")
