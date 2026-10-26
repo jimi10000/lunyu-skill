@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `scripts/bug_ledger.py` — 缺陷台账（add/list/show/update/stats/export）
 - `scripts/release_note.py` — 版本存档（tag/list/show/rollback）
 - `scripts/github-publish.sh` — 用 PAT 一键建 GitHub 仓库并推送（REST API，token 走参数不落盘，账号信息走环境变量）
+- `scripts/build_apk.sh` — 自动化 Gradle 打包 APK，输出 APK 路径 + md5
+- `scripts/vm_test.sh` — Android 模拟器自动化冒烟测试：启动/安装/拉起/截图/UI dump/抓崩溃，输出测试报告
+- `scripts/send_mail.py` — 带附件邮件发送（SMTP 465，凭据全走环境变量）
+- `scripts/release.py` — 双端发布 GitHub+Gitee：建 Release/传附件/更新 update.json，全幂等
 
 ### Notes
 

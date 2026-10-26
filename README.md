@@ -84,6 +84,27 @@ python scripts/bug_ledger.py add --title "空数组越界" --priority P1
 python scripts/release_note.py tag --version 1.0.0 --summary "首个版本"
 ```
 
+### 5. 自动化打包测试发包（一条龙）
+
+```bash
+# ① 打包（生成 APK + md5）
+./scripts/build_apk.sh --dir ./android --module :app --build-type release --arch arm64-v8a
+
+# ② 模拟器冒烟测试（安装/启动/截图/抓崩溃）
+./scripts/vm_test.sh app-release.apk com.example.app ./test_out
+
+# ③ 双端发布（GitHub + Gitee Release/附件/update.json）
+export GITHUB_USER=your-name GITHUB_TOKEN=ghp_xxx GITHUB_REPO=my-app
+export GITEE_USER=your-name GITEE_TOKEN=xxx GITEE_REPO=my-app
+python scripts/release.py --apk app-release.apk --version v1.0.0 \
+    --name "我的应用 v1.0.0" --desc "发布说明" --update-json update.json \
+    --platform github --platform gitee
+
+# ④ 带 APK 附件发邮件（交付铁律）
+export SMTP_SENDER=you@qq.com SMTP_AUTH=授权码 SMTP_RECEIVER=you@qq.com
+python scripts/send_mail.py app-release.apk "交付 v1.0.0" body.txt
+```
+
 ## 目录结构
 
 ```
@@ -106,7 +127,11 @@ lunyu/
     ├── preflight.py                # 提交前扫密钥/大文件/调试残留
     ├── bug_ledger.py               # 缺陷台账 P0-P3 + 门禁校验
     ├── release_note.py                # 版本存档 + CHANGELOG + tag/回滚
-    └── github-publish.sh           # 一键建 GitHub 仓库并推送（PAT）
+    ├── github-publish.sh           # 一键建 GitHub 仓库并推送（PAT）
+    ├── build_apk.sh               # 自动化 Gradle 打包 APK + 输出 md5
+    ├── vm_test.sh                   # Android 模拟器自动化冒烟测试
+    ├── send_mail.py                   # 带附件邮件发送（SMTP，凭据走环境变量）
+    └── release.py                    # 双端发布 GitHub+Gitee Release/附件/update.json
 ```
 
 ## 脚本一览
@@ -119,8 +144,12 @@ lunyu/
 | `bug_ledger.py` | 缺陷台账 add/list/show/update/stats/export | `stats` 有未关闭 P0/P1 返回 1 |
 | `release_note.py` | 版本存档 tag/list/show/rollback | 有未关闭 P0/P1 返回 2 |
 | `github-publish.sh` | 一键建 GitHub 仓库并推送（需 PAT） | 0=成功 |
+| `build_apk.sh` | 自动化 Gradle 打包 APK + 输出 md5 | 0=成功 |
+| `vm_test.sh` | Android 模拟器安装/启动/截图/抓崩溃 | 0=通过 / 1=失败 |
+| `send_mail.py` | 带附件邮件发送（SMTP） | 0=成功 / 1=失败 |
+| `release.py` | 双端发布 GitHub+Gitee Release/附件/update.json | 0=成功 / 1=失败 |
 
-> 🔒 **安全提示**：`github-publish.sh` 通过命令行参数接收 PAT，不会把 token 写进仓库。但请通过环境变量 `GITHUB_USER` / `GIT_USER_NAME` / `GIT_USER_EMAIL` 配置你的账号信息，不要把真实账号硬编码进脚本。
+> 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 
 ## 三通道机制
 
