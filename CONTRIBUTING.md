@@ -21,7 +21,8 @@
 
 ### 2. 脚本规范
 
-- **零外部依赖**：只用 Python 标准库
+- **零外部依赖**：只用 Python 标准库 / Bash 内置
+- **零硬编码凭据**：GitHub PAT、Gitee token、SMTP 授权码、账号信息一律走环境变量或命令行参数，**禁止写死在脚本里**
 - **必须有 `--help`**：所有命令行参数要能自解释
 - **必须有 docstring**：文件头三行说明用途 + 用法
 - **退出码语义清晰**：0=成功 / 1=阻断 / 2=警告，别混用
@@ -80,6 +81,15 @@ python scripts/bug_ledger.py stats
 
 # 5. 版本存档
 python scripts/release_note.py tag --version 1.0.0 --summary "首个版本"
+
+# 6. 日报/周报/项目总结
+python scripts/report.py daily --project "测试" --body "今天完成XX"
+python scripts/report.py weekly --project "测试" --body "本周完成XX"
+python scripts/report.py summary --project "测试 v1.0" --body "核心成果"
+python scripts/report.py list
+
+# 7. 自更新（不会真更新，只验证能取到远端版本）
+bash scripts/self_update.sh
 ```
 
 ## 许可证
