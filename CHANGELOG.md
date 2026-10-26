@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.6] - 2026-10-26
+
+### Added
+
+- **自学习：经验库 `lessons.py`**（告诸往而知来者）——把踩过的坑、验证过的结论沉淀下来，下次自动复用，不再重复交学费
+  - 闭环：**踩坑 → 入库 → 检索命中 → 用到新需求 → 再沉淀**；已嵌进流水线（Step 1 检索、Step 10 沉淀）
+  - **命中即加权**：每次 `search` 命中累加 `hits`，用得越多的经验自动排越靠前，不需要人工维护优先级
+  - 检索打分：标签 > 场景 > 问题 > 结论；中文走 2-gram 分词，短语也能命中
+  - 支持 `add / search / list / stats / export`，可导出 markdown 贴进复盘或周报
+- **自驱力：主动巡检 `patrol.py`**（君子求诸己）——不等用户下指令，自己体检项目输出「现在该做的事」
+  - 6 项检查：未关闭 P0/P1（阻断）、缺陷超期、日报周报缺失、CHANGELOG 落后、经验库久未沉淀、工作区未提交
+  - 阻断项永远排最前；单项检查异常不影响其他项跑完
+  - 退出码 `0=无阻断 / 1=有阻断`，可直接当 CI 门禁或挂定时任务；`--json` 机器可读
+
+### Fixed
+
+- **测试入口会给"假全绿"**：`__pycache__` 里的 stale `.pyc` 会让 unittest 加载到旧版测试代码，之前一批坏测试被伪装成通过、测试数也对不上（169 vs 178）。`run_tests.py` 现在跑测试前自动清理 `__pycache__`
+- 清缓存后暴露并修复的 4 个测试自身缺陷：`test_scheduler.py` 缺 `import tempfile`；`run_input` 的 input 是位置参数却被当 kwargs 断言；`cmd_install` 会校验 report.py 真实存在（mock 需给真实文件）；Windows 下 `abspath` 会改写路径导致跨平台断言失败；`test_release.py` 调用 `put_update_json` 前未落盘文件
+
 ## [1.1.5] - 2026-10-26
 
 ### Added

@@ -47,7 +47,6 @@ def send_mail(subject, body, attachment_path):
     sender = os.environ.get("SMTP_SENDER", "")
     auth = os.environ.get("SMTP_AUTH", "")
     receivers = [r.strip() for r in os.environ.get("SMTP_RECEIVER", "").split(",") if r.strip()]
-    use_ssl = os.environ.get("SMTP_SSL", "true").lower() != "false"
 
     if not sender or not auth or not receivers:
         raise RuntimeError(
@@ -62,14 +61,15 @@ def send_mail(subject, body, attachment_path):
 
     fname = os.path.basename(attachment_path)
     with open(attachment_path, "rb") as f:
-        part = MIMEApplication(f.read(), Name=fname)
-    part["Content-Disposition"] = f'attachment; filename="{fname}"'
+        part = MIMEApplication(f.read())
+    # filename 用 RFC2231 编码(3 元组), 中文附件名直接塞 header 会乱码
+    part.add_header("Content-Disposition", "attachment", filename=("utf-8", "", fname))
     msg.attach(part)
 
     if use_ssl:
-        server = smtplib.SMTP_SSL(server_host, server_port)
+        server = smtplib.SMTP_SSL(server_host, server_port, timeout=30)
     else:
-        server = smtplib.SMTP(server_host, server_port)
+        server = smtplib.SMTP(server_host, server_port, timeout=30)
         server.ehlo()
         server.starttls()
         server.ehlo()

@@ -35,6 +35,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -67,8 +68,17 @@ class Publisher:
 
     def _auth(self):
         if self.platform == "gitee":
-            return {"access_token": self.token}
+            # Gitee API v5 不认 HTTP header 鉴权, access_token 必须走 query/body,
+            # 由 _url() 统一拼进 query; 这里返回空头
+            return {}
         return {"Authorization": f"Bearer {self.token}", "Accept": "application/vnd.github+json"}
+
+    def _url(self, url):
+        """Gitee 把 access_token 拼进 query(已有 query 则用 & 续接); GitHub 原样返回。"""
+        if self.platform != "gitee":
+            return url
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}access_token={urllib.parse.quote(self.token)}"
 
     def _release_url(self, rid=None):
         base = f"{self._api_base()}/repos/{self.user}/{self.repo}/releases"
@@ -91,7 +101,7 @@ class Publisher:
     def _asset_upload(self, rid, file_path):
         fname = os.path.basename(file_path)
         if self.platform == "gitee":
-            url = f"{self._release_url(rid)}/attach_files"
+            url = self._url(f"{self._release_url(rid)}/attach_files")
             with open(file_path, "rb") as f:
                 payload = f.read()
             boundary = "----lunyuBoundary7e3a"
@@ -103,7 +113,8 @@ class Publisher:
                             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
                             timeout=180)
             return st
-        url = f"https://uploads.github.com/repos/{self.user}/{self.repo}/releases/{rid}/assets?name={fname}"
+        # 文件名必须 urlencode, 带空格/中文的文件名否则 400
+        url = f"https://uploads.github.com/repos/{self.user}/{self.repo}/releases/{rid}/assets?name={urllib.parse.quote(fname)}"
         with open(file_path, "rb") as f:
             payload = f.read()
         st, _ = req_raw("POST", url, data=payload,
@@ -122,23 +133,25 @@ class Publisher:
             "target_commitish": self.branch,
         }).encode("utf-8")
         try:
-            st, j = req("POST", self._release_url(), data=create,
+            st, j = req("POST", self._url(self._release_url()), data=create,
                         headers={**self._auth(), "Content-Type": "application/json"})
             return j["id"]
         except urllib.error.HTTPError as e:
             if e.code in (409, 422):
-                st, j = req("GET", f"{self._release_url()}/tags/{version}", headers=self._auth())
+                st, j = req("GET", self._url(f"{self._release_url()}/tags/{version}"),
+                            headers=self._auth())
                 return j["id"]
             raise
 
     def upload_asset(self, rid, file_path):
         """上传附件，同名先删。"""
         fname = os.path.basename(file_path)
-        st, arr = req("GET", self._asset_list_url(rid), headers=self._auth())
+        st, arr = req("GET", self._url(self._asset_list_url(rid)), headers=self._auth())
         for a in (arr or []):
             if a.get("name") == fname:
                 try:
-                    req("DELETE", self._asset_delete_url(rid, a["id"]), headers=self._auth())
+                    req("DELETE", self._url(self._asset_delete_url(rid, a["id"])),
+                        headers=self._auth())
                 except Exception as e:
                     print(f"  {self.platform} 删旧附件失败(忽略): {e}")
         return self._asset_upload(rid, file_path)
@@ -146,10 +159,14 @@ class Publisher:
     def put_update_json(self, update_json_path, version):
         """把 update.json 内容以 base64 写到仓库 main 分支（幂等）。"""
         url = f"{self._api_base()}/repos/{self.user}/{self.repo}/contents/update.json"
+        # GET 必须带 ref, 否则 GitHub 只查默认分支, 非默认分支时 sha 会取错
+        get_url = f"{url}?ref={self.branch}"
+        put_url = url
         if self.platform == "gitee":
-            url += f"?ref={self.branch}"
+            get_url = self._url(get_url)
+            put_url = self._url(url)
         try:
-            st, j = req("GET", url, headers=self._auth())
+            st, j = req("GET", get_url, headers=self._auth())
             sha = j.get("sha")
         except urllib.error.HTTPError as e:
             if e.code == 404:
@@ -164,7 +181,7 @@ class Publisher:
             "branch": self.branch,
             **({"sha": sha} if sha else {}),
         }).encode("utf-8")
-        st, j = req("PUT", url, data=body,
+        st, j = req("PUT", put_url, data=body,
                     headers={**self._auth(), "Content-Type": "application/json"})
         return st
 

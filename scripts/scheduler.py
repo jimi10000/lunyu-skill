@@ -51,6 +51,16 @@ def run(cmd):
         return 1, str(e)
 
 
+def run_input(cmd, input_text):
+    """带 stdin 的 run()。crontab 必须这样写: 经 shell 的 echo 不解释 \n,
+    repr 出来的字面量会把整个 crontab 压成一行坏条目。"""
+    try:
+        r = subprocess.run(cmd, input=input_text, capture_output=True, text=True, timeout=15)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return 1, str(e)
+
+
 def get_report_py():
     return os.path.join(find_skill_dir(), "scripts", "report.py")
 
@@ -80,8 +90,11 @@ def cmd_install(args):
         # schtasks /create /tn 名称 /tr 命令 /sc daily /st HH:MM
         # 直接调 python report.py，不经过 bash（避免 WSL 解析问题）
         cmd = build_windows_cmd(project, args.author)
+        # 计划任务默认工作目录是 System32, 而 report.py 按 CWD 相对路径读写 .lunyu/,
+        # 不先 cd 过去日报会写错位置
+        tr_value = f'cmd /c cd /d "{project}" && {cmd}'
         # schtasks 的 /tr 参数里的引号需要转义
-        schtasks_cmd = cmd.replace('"', '\\"')
+        schtasks_cmd = tr_value.replace('"', '\\"')
         rc, out = run(["schtasks", "/create", "/tn", TASK_NAME, "/tr", schtasks_cmd,
                        "/sc", "daily", "/st", f"{hour}:{minute}", "/f"])
         if rc != 0:
@@ -89,11 +102,11 @@ def cmd_install(args):
             return 1
         print(f"已注册 Windows 计划任务 [{TASK_NAME}] 每天 {args.time} 运行")
         print(f"  项目: {project}")
-        print(f"  命令: {cmd}")
+        print(f"  命令: {tr_value}")
     else:
-        # Linux/macOS: crontab
+        # Linux/macOS: crontab (路径含空格也要能跑, 全部加引号)
         script = get_daily_script()
-        cron_line = f"{minute} {hour} * * * cd {project} && bash {script} {project} {args.author} >/dev/null 2>&1"
+        cron_line = f'{minute} {hour} * * * cd "{project}" && bash "{script}" "{project}" "{args.author}" >/dev/null 2>&1'
         rc, out = run(["crontab", "-l"])
         existing = out if rc == 0 else ""
         if TASK_NAME in existing:
@@ -102,7 +115,7 @@ def cmd_install(args):
             rc, out = run(["crontab", "-l"])
             existing = out if rc == 0 else ""
         new_cron = (existing.rstrip() + "\n" if existing else "") + cron_line + "\n"
-        rc2, out2 = run(["bash", "-c", f"echo {new_cron!r} | crontab -"])
+        rc2, out2 = run_input(["crontab", "-"], new_cron)
         if rc2 != 0:
             print(f"写入 crontab 失败: {out2}")
             return 1
@@ -126,7 +139,7 @@ def cmd_uninstall(args):
             return 0
         lines = [l for l in out.splitlines() if TASK_NAME not in l]
         new_cron = "\n".join(lines) + ("\n" if lines else "")
-        rc2, out2 = run(["bash", "-c", f"echo {new_cron!r} | crontab -"])
+        rc2, out2 = run_input(["crontab", "-"], new_cron)
         if rc2 != 0:
             print(f"卸载失败: {out2}")
             return 1
@@ -176,10 +189,11 @@ def get_bash_path():
 def cmd_run_once(args):
     project = os.path.abspath(args.project)
     if is_windows():
-        # Windows 直接调 python report.py（shell=True 避免引号解析问题）
+        # Windows 直接调 python report.py（shell=True 避免引号解析问题）；
+        # cwd 与计划任务对齐, 都在项目目录里跑, 否则 .lunyu/ 读写位置不一致
         import subprocess as sp
-        r = sp.run(build_windows_cmd(project, args.author), shell=True,
-                   capture_output=True, text=True, timeout=30, errors="ignore")
+        r = sp.run(build_windows_cmd(project, args.author), shell=True, cwd=project,
+                   capture_output=True, text=True, timeout=120, errors="ignore")
         print(r.stdout + r.stderr)
         return r.returncode
     else:

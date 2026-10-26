@@ -30,8 +30,11 @@ if [ ! -d "$PROJECT_DIR" ]; then
 fi
 
 cd "$PROJECT_DIR"
+# 兼容 python/python3: 新版 Ubuntu 只有 python3, Windows Git Bash 只有 python
+PY=python
+command -v python >/dev/null 2>&1 || PY=python3
 # 如果没有 .lunyu 数据，report.py 会生成空骨架日报（不报错）
-python "$REPORT_PY" daily --project "$(basename "$PROJECT_DIR")" --author "$AUTHOR" \
+"$PY" "$REPORT_PY" daily --project "$(basename "$PROJECT_DIR")" --author "$AUTHOR" \
   --body "（自动生成日报，请补充今日完成事项）"
 
 echo "DAILY_REPORT_DONE"

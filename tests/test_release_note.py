@@ -77,6 +77,21 @@ class CollectBugsTest(unittest.TestCase):
         ids = [b["id"] for b in bugs]
         self.assertEqual(ids, ["BUG-0001"])
 
+    def test_version_match_not_substring(self):
+        """回归: 版本必须精确匹配(去 v 前缀), 子串匹配会把 v1.2.0 命中 v11.2.0 的缺陷。"""
+        root = make_root()
+        with open(os.path.join(root, ".lunyu", "bugs.json"), "w", encoding="utf-8") as f:
+            json.dump({"bugs": [
+                {"id": "B1", "status": "关闭", "priority": "P1",
+                 "related_version": "v11.2.0", "title": "wrong"},
+                {"id": "B2", "status": "关闭", "priority": "P1",
+                 "related_version": "v1.2.0", "title": "right-v"},
+                {"id": "B3", "status": "关闭", "priority": "P1",
+                 "related_version": "1.2.0", "title": "right-plain"},
+            ]}, f, ensure_ascii=False)
+        bugs = release_note.collect_closed_bugs(root, "1.2.0")
+        self.assertEqual([b["id"] for b in bugs], ["B2", "B3"])
+
     def test_missing_bugs_file(self):
         root = make_root()
         self.assertEqual(release_note.collect_closed_bugs(root, "1.0.0"), [])

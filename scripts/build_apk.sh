@@ -94,7 +94,13 @@ if [ -z "$OUT_DIR" ]; then
 fi
 
 # 找出最新 APK
-APK=$(find "$OUT_DIR" -name "*.apk" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+# GNU find 支持 -printf; BSD find(macOS) 不支持, 用 ls -t 兜底
+APK=""
+if find "$OUT_DIR" -maxdepth 0 -printf '' >/dev/null 2>&1; then
+  APK=$(find "$OUT_DIR" -name "*.apk" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+else
+  APK=$(ls -t "$OUT_DIR"/*.apk "$OUT_DIR"/*/*.apk 2>/dev/null | head -1)
+fi
 if [ -z "$APK" ]; then
   echo "错误: 未在 $OUT_DIR 找到 APK 文件"
   exit 1

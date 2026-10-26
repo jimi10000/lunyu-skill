@@ -34,8 +34,22 @@ class PublisherUrlTest(unittest.TestCase):
             "Authorization": "Bearer tok",
             "Accept": "application/vnd.github+json",
         })
+        # 关键回归: Gitee v5 不认 header 鉴权, access_token 必须走 query(_url 拼)
         gi = release.Publisher("gitee", "u", "r", "tok")
-        self.assertEqual(gi._auth(), {"access_token": "tok"})
+        self.assertEqual(gi._auth(), {})
+
+    def test_gitee_url_carries_token(self):
+        gi = release.Publisher("gitee", "u", "r", "tok")
+        self.assertIn("access_token=tok",
+                      gi._url("https://gitee.com/api/v5/repos/u/r/releases"))
+        # 已有 query 时用 & 续接而不是再造一个 ?
+        self.assertIn("?ref=main&access_token=tok",
+                      gi._url("https://gitee.com/api/v5/repos/u/r/contents/update.json?ref=main"))
+
+    def test_github_url_untouched(self):
+        gh = release.Publisher("github", "u", "r", "tok")
+        self.assertEqual(gh._url("https://api.github.com/repos/u/r/releases"),
+                         "https://api.github.com/repos/u/r/releases")
 
     def test_asset_delete_url(self):
         # 关键回归: GitHub 资产删除用 releases/assets/{id}，不是 release 路径
@@ -137,6 +151,49 @@ class PutUpdateJsonTest(unittest.TestCase):
         put_call = [c for c in m.call_args_list if c.args[0] == "PUT"][0]
         body = json.loads(put_call.kwargs["data"])
         self.assertEqual(body["sha"], "abc123")
+
+
+class GiteeAuthContractTest(unittest.TestCase):
+    """回归: Gitee 全链路请求 URL 必须带 access_token(v5 不认 header 鉴权)。"""
+
+    def test_all_gitee_calls_carry_token(self):
+        pub = release.Publisher("gitee", "u", "r", "tok")
+        tmp = tempfile.mkdtemp()
+        apk = os.path.join(tmp, "app.apk")
+        with open(apk, "wb") as f:
+            f.write(b"apk")
+        # put_update_json 会真实读取该文件, 必须先落盘
+        update_json = os.path.join(tmp, "u.json")
+        with open(update_json, "wb") as f:
+            f.write(b'{"version": "1.0.0"}')
+        urls = []
+
+        def fake_req(method, url, **kw):
+            urls.append((method, url))
+            if method == "POST":
+                return 201, {"id": 1}
+            return 200, {}  # GET: 空 dict, 兼容 j.get("sha") 与 (arr or [])
+
+        with patch.object(release, "req", side_effect=fake_req), \
+             patch.object(release, "req_raw", return_value=(200, b"")):
+            pub.create_release("v1.0.0", "n", "d")
+            pub.upload_asset(1, apk)
+            pub.put_update_json(update_json, "v1.0.0")
+        self.assertTrue(urls)
+        for method, url in urls:
+            self.assertIn("access_token=tok", url, f"{method} {url}")
+
+    def test_upload_asset_filename_urlencoded(self):
+        pub = release.Publisher("github", "u", "r", "tok")
+        tmp = tempfile.mkdtemp()
+        apk = os.path.join(tmp, "风火轮 v1.apk")
+        with open(apk, "wb") as f:
+            f.write(b"apk")
+        with patch.object(release, "req", return_value=(200, [])), \
+             patch.object(release, "req_raw", return_value=(200, b"")) as m:
+            pub.upload_asset(1, apk)
+        url = m.call_args.args[1]
+        self.assertIn("name=%E9%A3%8E%E7%81%AB%E8%BD%AE%20v1.apk", url)
 
 
 class ReqTest(unittest.TestCase):

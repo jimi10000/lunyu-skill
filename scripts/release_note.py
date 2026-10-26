@@ -96,7 +96,8 @@ def collect_closed_bugs(root, version):
         if b.get("status") != "关闭":
             continue
         rv = b.get("related_version") or ""
-        if rv and version in rv:
+        # 精确匹配(去 v 前缀), 子串匹配会把 v1.2.0 命中到 v11.2.0 的缺陷
+        if rv and rv.lstrip("v") == version:
             out.append(b)
     return out
 

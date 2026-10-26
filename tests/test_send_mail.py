@@ -115,6 +115,20 @@ class SendMailTest(unittest.TestCase):
                 send_mail.send_mail("主题", "正文", self.att)
         self.assertIn("拒绝", str(ctx.exception))
 
+    def test_chinese_attachment_filename_encoded(self):
+        """回归: 中文附件名必须 RFC2231 编码, 直接塞 header 会乱码。"""
+        self.apply_env()
+        fake = FakeServer()
+        att = os.path.join(self.tmp, "风火轮.apk")
+        with open(att, "wb") as f:
+            f.write(b"x")
+        with patch.object(send_mail.smtplib, "SMTP_SSL", return_value=fake):
+            ok = send_mail.send_mail("主题", "正文", att)
+        self.assertTrue(ok)
+        raw = fake.sent[2]
+        self.assertIn("filename*=", raw)
+        self.assertNotIn('filename="风火轮', raw)
+
 
 if __name__ == "__main__":
     unittest.main()
