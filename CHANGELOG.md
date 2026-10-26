@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.2] - 2026-10-26
+
+### Fixed
+
+- **`release.py`**：修复 GitHub 资产删除 URL 错误（`releases/{rid}/assets/{id}` 会 404，应为 `releases/assets/{id}`），幂等重发现在能正确删旧传新
+
 ## [1.1.1] - 2026-10-26
 
 ### Fixed

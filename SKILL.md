@@ -20,7 +20,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.1.1"
+  version: "1.1.2"
   author: workbuddy
 ---
 

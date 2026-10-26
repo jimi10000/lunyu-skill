@@ -84,7 +84,9 @@ class Publisher:
     def _asset_delete_url(self, rid, aid):
         if self.platform == "gitee":
             return f"{self._release_url(rid)}/attach_files/{aid}"
-        return f"{self._release_url(rid)}/assets/{aid}"
+        # GitHub 资产删除：DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}
+        # 资产 ID 全局唯一，不需要 release id；用 release 路径会 404
+        return f"{self._api_base()}/repos/{self.user}/{self.repo}/releases/assets/{aid}"
 
     def _asset_upload(self, rid, file_path):
         fname = os.path.basename(file_path)

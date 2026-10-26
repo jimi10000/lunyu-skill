@@ -5,7 +5,7 @@
 > 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
 
 ---
