@@ -2,6 +2,8 @@
 
 > 以《论语》为工程价值观内核的企业级研发流水线。需求评审 → 方案设计 → 开源预研 → 编码 → 自测 → CR → 版本归档 → 风险评估 → 复盘。内置分类日志系统、密钥扫描、缺陷工单台账、发布回滚。
 
+> 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
@@ -103,7 +105,8 @@ lunyu/
     ├── logkit.py                   # 生成分类日志系统到目标项目
     ├── preflight.py                # 提交前扫密钥/大文件/调试残留
     ├── bug_ledger.py               # 缺陷台账 P0-P3 + 门禁校验
-    └── release_note.py             # 版本存档 + CHANGELOG + tag/回滚
+    ├── release_note.py                # 版本存档 + CHANGELOG + tag/回滚
+    └── github-publish.sh           # 一键建 GitHub 仓库并推送（PAT）
 ```
 
 ## 脚本一览
@@ -115,6 +118,9 @@ lunyu/
 | `preflight.py` | 扫密钥/大文件/调试残留/.gitignore | 0=通过 / 1=阻断 / 2=警告 |
 | `bug_ledger.py` | 缺陷台账 add/list/show/update/stats/export | `stats` 有未关闭 P0/P1 返回 1 |
 | `release_note.py` | 版本存档 tag/list/show/rollback | 有未关闭 P0/P1 返回 2 |
+| `github-publish.sh` | 一键建 GitHub 仓库并推送（需 PAT） | 0=成功 |
+
+> 🔒 **安全提示**：`github-publish.sh` 通过命令行参数接收 PAT，不会把 token 写进仓库。但请通过环境变量 `GITHUB_USER` / `GIT_USER_NAME` / `GIT_USER_EMAIL` 配置你的账号信息，不要把真实账号硬编码进脚本。
 
 ## 三通道机制
 

@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `scripts/preflight.py` — 提交前扫描（密钥/调试残留/大文件/.gitignore）
 - `scripts/bug_ledger.py` — 缺陷台账（add/list/show/update/stats/export）
 - `scripts/release_note.py` — 版本存档（tag/list/show/rollback）
+- `scripts/github-publish.sh` — 用 PAT 一键建 GitHub 仓库并推送（REST API，token 走参数不落盘，账号信息走环境变量）
 
 ### Notes
 
