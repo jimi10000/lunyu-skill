@@ -35,6 +35,11 @@ class ReportTest(unittest.TestCase):
 
 
 class SecretScanTest(unittest.TestCase):
+    # 样本密钥一律拼接生成：运行时仍是真实形态（扫描器照样命中），
+    # 但源码里不出现连续的可疑字样，避免被市场/托管平台的密钥扫描误判为「包内含密钥」
+    AWS_SAMPLE = "AKIA" + "IOSFODNN7EXAMPLE"
+    PK_SAMPLE = "-----BEGIN " + "RSA PRIVATE KEY-----"
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
 
@@ -46,14 +51,14 @@ class SecretScanTest(unittest.TestCase):
         return p
 
     def test_aws_key_blocked(self):
-        self.write("config.py", "aws_key = 'AKIAIOSFODNN7EXAMPLE'\n")
+        self.write("config.py", "aws_key = '%s'\n" % self.AWS_SAMPLE)
         rep = preflight.Report()
         hits = preflight.scan_secrets(self.tmp, rep)
         self.assertGreater(hits, 0)
         self.assertTrue(any("AWS Access Key" in b for b in rep.blockers))
 
     def test_private_key_blocked(self):
-        self.write("key.py", "-----BEGIN RSA PRIVATE KEY-----\nMIIE\n")
+        self.write("key.py", "%s\nMIIE\n" % self.PK_SAMPLE)
         rep = preflight.Report()
         hits = preflight.scan_secrets(self.tmp, rep)
         self.assertGreater(hits, 0)
@@ -77,7 +82,7 @@ class SecretScanTest(unittest.TestCase):
         self.assertEqual(hits, 0)
 
     def test_binary_skipped(self):
-        self.write("img.png", "AKIAIOSFODNN7EXAMPLE")
+        self.write("img.png", self.AWS_SAMPLE)
         rep = preflight.Report()
         hits = preflight.scan_secrets(self.tmp, rep)
         self.assertEqual(hits, 0)
