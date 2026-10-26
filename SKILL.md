@@ -8,9 +8,11 @@ description: |
   内置分类日志系统生成器（按问题域分类 + trace_id 全链路 + 分级 + 结构化字段 + 耗时埋点）、
   提交前密钥/调试残留扫描、测试金字塔、CI 门禁、Git 分支规范、Conventional Commits、SemVer、
   CHANGELOG、Tag 快照、回滚预案、缺陷工单台账（P0-P3）、事故复盘（无责 + MTTD/MTTR）。
+  内置日报/周报/项目总结自动生成（好记不如烂笔头），已安装用户一条命令自更新技能包。
   TRIGGER when: 用户要写代码/开发功能/重构/搭项目; 提到 论语、夫子码书、需求评审、技术方案、
   代码评审、PR/MR、CR、git分支、版本tag、CHANGELOG、回滚、提bug、缺陷工单、bug台账、版本归档;
   提到 日志系统、分类日志、打日志、日志规范、trace_id、错误日志、可观测性、监控告警、事故复盘;
+  提到 日报、周报、项目总结、工作总结、复盘;
   或要求按正规研发流程交付(生产级/上线/对外交付)。
   DO NOT TRIGGER when: 一行修复、纯代码解释问答、只读代码、用户明确说不需要流程的一次性脚本。
 description_zh: "论语 · 企业级研发流水线：需求评审→方案→预研→编码→单测CI→CR→版本归档→缺陷台账→复盘"
@@ -18,7 +20,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.0.0"
+  version: "1.1.0"
   author: workbuddy
 ---
 
@@ -375,6 +377,76 @@ python scripts/release_note.py tag --version 1.2.0 --branch main --baseline dev 
 6. 新建独立缺陷工单（不绑当前迭代）
 7. 结束，开启新需求
 
+## Step 12 · 好记性不如烂笔头：项目总结 + 日报 + 周报
+
+**写完一个项目要总结，每天要有日报，每周要有周报。** 这是「吾日三省吾身」的周期性落地，让复盘不再只发生在 Step 10 的迭代末尾，而是成为日常习惯。
+
+### 12.1 什么时候写
+
+| 时机 | 类型 | 触发 |
+|---|---|---|
+| 每天下班前 | 日报 | 当天有实质进展（编码/修 bug/发版/调研/评审） |
+| 每周五 | 周报 | 本周有发版、P0/P1 关闭、跨迭代进展 |
+| 项目/大版本收尾 | 项目总结 | 迭代结束、验收通过、发布上线后 |
+
+### 12.2 用脚本自动生成
+
+```bash
+# 日报（默认今天，--date 可指定）
+python scripts/report.py daily --project "风火轮" --author "你" \
+  --body "完成双端发布链路" --body "修复 P1 空数组越界"
+
+# 周报（默认本周）
+python scripts/report.py weekly --date 2026-10-26 --project "风火轮" --body "本周完成 Release 发布"
+
+# 项目总结
+python scripts/report.py summary --project "风火轮 v3.0.77" --author "你" \
+  --body "核心成果1" --body "核心成果2"
+
+# 查看历史报告
+python scripts/report.py list
+```
+
+### 12.3 自动汇总什么
+
+脚本自动读取 `.lunyu/` 下的台账数据，不用手动统计：
+
+- **缺陷**：今日/本周关闭数、未关闭 P0/P1、优先级分布 → 写进「风险与阻塞」
+- **版本**：今日/本周发版 tag → 写进「数据」章节
+- **CHANGELOG**：今日/本周版本条目
+
+### 12.4 报告里必须手写的部分
+
+脚本只搭骨架，**经验和教训必须人写**，这是「烂笔头」的真正价值：
+
+- ✅ 收获（选型经验、架构思路）
+- ⚠️ 失误与改进（具体场景 + 具体规避办法，禁止写「加强测试」）
+- 🐛 缺陷根因（需求问题/设计问题/编码疏漏/测试漏测）
+- 明日计划 / 下周计划 / 遗留事项
+
+### 12.5 报告落盘
+
+统一存到项目根目录 `.lunyu/reports/`，与缺陷台账、版本存档并列，方便追溯：
+
+```
+.lunyu/reports/
+├── 日报-2026-10-26.md
+├── 周报-2026-10-26.md
+└── 项目总结-20261026.md
+```
+
+**交付物**：`## 【交付物：日报】` / `## 【交付物：周报】` / `## 【交付物：项目总结】`
+
+## 自更新（已安装用户）
+
+lunyu 本地技能不会静默自动更新。已安装用户运行一条命令即可从 GitHub 拉最新版覆盖：
+
+```bash
+bash scripts/self_update.sh
+```
+
+脚本会对比本地与远端版本号，有新版才更新，并保留 `.lunyu/` 数据文件。环境变量 `LUNYU_FORCE=1` 可强制更新。
+
 ---
 
 ## 交付物落盘位置
@@ -386,7 +458,8 @@ python scripts/release_note.py tag --version 1.2.0 --branch main --baseline dev 
 ├── bugs.json          # 缺陷台账（脚本管理，勿手改）
 ├── releases.json      # 版本存档（脚本管理，勿手改）
 ├── CHANGELOG.md       # 变更日志
-└── docs/              # 需求单/方案/调研/CR/风险/复盘
+├── docs/              # 需求单/方案/调研/CR/风险/复盘
+└── reports/           # 日报/周报/项目总结（report.py 生成）
 ```
 
 ## 脚本清单
@@ -400,6 +473,7 @@ python scripts/release_note.py tag --version 1.2.0 --branch main --baseline dev 
 | `preflight.py` | 提交前扫密钥/大文件/调试残留，可选跑 lint+test | Step 6 提交前 |
 | `bug_ledger.py` | 缺陷台账 P0-P3，`stats` 带门禁校验 | Step 6/7/9 |
 | `release_note.py` | 版本存档 + CHANGELOG + tag/回滚命令 | Step 8 |
+| `report.py` | 项目总结/日报/周报自动生成 | Step 12 周期性复盘 |
 
 ## 规模自适应
 

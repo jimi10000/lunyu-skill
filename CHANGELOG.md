@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-26
+
+### Added
+
+- **项目总结/日报/周报自动生成**：`report.py` 汇总 `.lunyu/` 缺陷台账、版本存档、CHANGELOG，一键生成 Markdown 报告并落盘 `.lunyu/reports/`
+- **技能包一键自更新**：`self_update.sh` 对比本地与 GitHub 远端版本号，拉最新版覆盖，保留 `.lunyu/` 数据文件
+- **Step 12 周期性复盘**：把「好记性不如烂笔头」制度化，日报/周报/项目总结的触发时机与手写要求
+- **触发词扩展**：提到「日报/周报/项目总结/工作总结/复盘」时自动触发 lunyu
+
 ## [1.0.0] - 2026-10-26
 
 ### Added

@@ -105,6 +105,32 @@ export SMTP_SENDER=you@qq.com SMTP_AUTH=授权码 SMTP_RECEIVER=you@qq.com
 python scripts/send_mail.py app-release.apk "交付 v1.0.0" body.txt
 ```
 
+### 6. 日报 / 周报 / 项目总结（好记性不如烂笔头）
+
+```bash
+# 日报（默认今天）
+python scripts/report.py daily --project "风火轮" --body "完成发布链路" --body "修复 P1"
+
+# 周报（默认本周）
+python scripts/report.py weekly --project "风火轮" --body "本周完成双端发布"
+
+# 项目总结（项目/大版本收尾时）
+python scripts/report.py summary --project "风火轮 v3.0.77" --body "核心成果"
+
+# 查看历史报告
+python scripts/report.py list
+```
+
+脚本自动汇总 `.lunyu/` 里的缺陷台账、版本存档、CHANGELOG，生成 Markdown 存到 `.lunyu/reports/`。
+
+### 7. 已安装用户自更新
+
+```bash
+bash scripts/self_update.sh
+```
+
+自动对比本地与 GitHub 远端版本号，有新版才更新，保留 `.lunyu/` 数据文件。`LUNYU_FORCE=1` 强制更新。
+
 ## 目录结构
 
 ```
@@ -127,11 +153,13 @@ lunyu/
     ├── preflight.py                # 提交前扫密钥/大文件/调试残留
     ├── bug_ledger.py               # 缺陷台账 P0-P3 + 门禁校验
     ├── release_note.py                # 版本存档 + CHANGELOG + tag/回滚
+    ├── report.py                        # 日报/周报/项目总结自动生成
     ├── github-publish.sh           # 一键建 GitHub 仓库并推送（PAT）
     ├── build_apk.sh               # 自动化 Gradle 打包 APK + 输出 md5
     ├── vm_test.sh                   # Android 模拟器自动化冒烟测试
     ├── send_mail.py                   # 带附件邮件发送（SMTP，凭据走环境变量）
-    └── release.py                    # 双端发布 GitHub+Gitee Release/附件/update.json
+    ├── release.py                    # 双端发布 GitHub+Gitee Release/附件/update.json
+    └── self_update.sh                  # 一键自更新技能包（GitHub 拉最新版）
 ```
 
 ## 脚本一览
@@ -148,6 +176,8 @@ lunyu/
 | `vm_test.sh` | Android 模拟器安装/启动/截图/抓崩溃 | 0=通过 / 1=失败 |
 | `send_mail.py` | 带附件邮件发送（SMTP） | 0=成功 / 1=失败 |
 | `release.py` | 双端发布 GitHub+Gitee Release/附件/update.json | 0=成功 / 1=失败 |
+| `report.py` | 项目总结/日报/周报自动生成 | 0=成功 |
+| `self_update.sh` | 一键自更新技能包（对比版本号，保留 .lunyu） | 0=已最新/成功 / 1=失败 |
 
 > 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 
