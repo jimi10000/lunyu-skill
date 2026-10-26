@@ -1,6 +1,8 @@
 ---
 name: lunyu
 display_name: 论语 · 企业级研发流水线
+display_name_en: "Lunyu - Enterprise R&D Pipeline"
+version: "1.1.4"
 description: |
   以《论语》为工程价值观内核的企业级研发流水线：叩其两端定需求、名正言顺划范围、工欲善其事出方案、
   三人行做开源预研、文质彬彬写代码、学而时习之自测单测、见贤思齐做 CR 评审、温故知新归档版本、
@@ -20,7 +22,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.1.3"
+  version: "1.1.4"
   author: workbuddy
 ---
 

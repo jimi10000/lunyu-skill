@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.4] - 2026-10-26
+
+### Fixed
+
+- **`SKILL.md` frontmatter**：补全技能市场解析必需的顶层字段 `version`（原先只写在 `metadata` 子层，解析器读不到）和 `display_name_en`（原先缺失），解决上传技能市场时「解析失败：缺少 Skill 版本号 / 缺少英文展示名」的问题
+- `display_name_en` 值加双引号，避免 `R&D` 中的 `&` 被 YAML 当成锚点符号误解析
+
 ## [1.1.3] - 2026-10-26
 
 ### Added
