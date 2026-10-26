@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.3] - 2026-10-26
+
+### Added
+
+- **单元测试**：新增 `tests/` 目录，为全部 Python 脚本补上 `unittest` 测试（104 个用例，零第三方依赖），覆盖通道判定、日志模板生成、密钥扫描、缺陷台账、版本存档、日报/周报/总结生成、定时任务、SMTP 邮件、双端发布，以及 shell 脚本完整性检查
+- **测试运行入口**：`tests/run_tests.py`，一行命令跑全部测试
+- **交付物模板骨架**：新增 `templates/` 目录，7 个交付物模板（需求确认单/技术方案/调研报告/自测结果/风险清单/复盘纪要等），带 HTML 注释占位符，可直接复制使用
+- **定时日报**：`scheduler.py` 注册「每天自动生成日报」定时任务（Windows schtasks / Linux cron），`daily_report.sh` 作为任务入口
+- **上架指引**：`上架指引.md` 提供 WorkBuddy 技能市场上架操作说明（open.workbuddy.cn）
+
+### Fixed
+
+- **`report.py`**：`summarize_releases` 未把 release 记录的 `created_at` 映射为日期字段，导致「今日/本周发版」统计永远为空；已修复并补充测试
+
 ## [1.1.2] - 2026-10-26
 
 ### Fixed

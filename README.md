@@ -154,12 +154,26 @@ lunyu/
     ├── bug_ledger.py               # 缺陷台账 P0-P3 + 门禁校验
     ├── release_note.py                # 版本存档 + CHANGELOG + tag/回滚
     ├── report.py                        # 日报/周报/项目总结自动生成
+    ├── scheduler.py                # 注册「每天自动生成日报」定时任务（schtasks/cron）
+    ├── daily_report.sh             # 定时任务入口：生成今日日报
     ├── github-publish.sh           # 一键建 GitHub 仓库并推送（PAT）
     ├── build_apk.sh               # 自动化 Gradle 打包 APK + 输出 md5
     ├── vm_test.sh                   # Android 模拟器自动化冒烟测试
     ├── send_mail.py                   # 带附件邮件发送（SMTP，凭据走环境变量）
     ├── release.py                    # 双端发布 GitHub+Gitee Release/附件/update.json
     └── self_update.sh                  # 一键自更新技能包（GitHub 拉最新版）
+└── tests/                         # 单元测试（unittest 零依赖，104 个用例）
+    ├── run_tests.py               # 测试运行入口
+    ├── test_flow.py               # flow.py 通道判定
+    ├── test_logkit.py             # logkit.py 模板生成
+    ├── test_preflight.py          # 密钥/大文件/调试/.gitignore 扫描
+    ├── test_bug_ledger.py         # 缺陷台账 CRUD + 门禁
+    ├── test_release_note.py       # 版本存档 + CHANGELOG
+    ├── test_report.py             # 日报/周报/总结生成
+    ├── test_scheduler.py          # 定时任务注册
+    ├── test_send_mail.py          # SMTP 邮件
+    ├── test_release.py            # 双端发布
+    └── test_shell_scripts.py      # shell 脚本完整性
 ```
 
 ## 脚本一览
@@ -177,7 +191,22 @@ lunyu/
 | `send_mail.py` | 带附件邮件发送（SMTP） | 0=成功 / 1=失败 |
 | `release.py` | 双端发布 GitHub+Gitee Release/附件/update.json | 0=成功 / 1=失败 |
 | `report.py` | 项目总结/日报/周报自动生成 | 0=成功 |
+| `scheduler.py` | 注册/卸载/查看每日自动日报定时任务（schtasks/cron） | 0=成功 / 1=失败 |
+| `daily_report.sh` | 定时任务入口：生成今日日报 | 0=成功 |
 | `self_update.sh` | 一键自更新技能包（对比版本号，保留 .lunyu） | 0=已最新/成功 / 1=失败 |
+
+## 单元测试
+
+所有 Python 脚本都有 `unittest` 单元测试（零第三方依赖），运行：
+
+```bash
+cd lunyu
+python tests/run_tests.py          # 或
+python -m unittest discover -s tests -v
+```
+
+覆盖：通道判定、日志模板生成、密钥扫描、缺陷台账、版本存档、日报/周报/总结、
+定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 104 个用例。
 
 > 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 

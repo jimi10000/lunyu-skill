@@ -20,7 +20,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.1.2"
+  version: "1.1.3"
   author: workbuddy
 ---
 
@@ -474,6 +474,25 @@ bash scripts/self_update.sh
 | `bug_ledger.py` | 缺陷台账 P0-P3，`stats` 带门禁校验 | Step 6/7/9 |
 | `release_note.py` | 版本存档 + CHANGELOG + tag/回滚命令 | Step 8 |
 | `report.py` | 项目总结/日报/周报自动生成 | Step 12 周期性复盘 |
+| `scheduler.py` | 注册「每天自动生成日报」定时任务（schtasks/cron） | Step 12 配置自动日报 |
+| `daily_report.sh` | 定时任务入口：生成今日日报 | 定时任务触发时 |
+| `release.py` | 双端发布 GitHub+Gitee Release/附件/update.json | 发布 |
+| `send_mail.py` | 带附件邮件发送（SMTP） | 交付/通知 |
+| `build_apk.sh` | Gradle 打包 APK + md5 | 发版前 |
+| `vm_test.sh` | Android 模拟器冒烟测试 | 发版前 |
+| `github-publish.sh` | 一键建 GitHub 仓库并推送（PAT） | 开源新项目 |
+| `self_update.sh` | 一键自更新技能包（对比版本号，保留 .lunyu） | 已安装用户升级 |
+
+## 单元测试
+
+`tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，104 个用例）：
+
+```bash
+python tests/run_tests.py          # 或
+python -m unittest discover -s tests -v
+```
+
+修改脚本后请先跑测试再提交，防止回归。
 
 ## 规模自适应
 

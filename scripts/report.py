@@ -148,7 +148,13 @@ def summarize_releases(releases, date_str):
     items = releases if isinstance(releases, list) else releases.get("releases", [])
     if not items:
         return None
-    today, week = filter_by_date(items, date_str)
+    # release 记录用 created_at，统一映射成 filter_by_date 认识的 date 字段
+    norm = []
+    for it in items:
+        entry = dict(it)
+        entry.setdefault("date", str(entry.get("created_at", ""))[:10])
+        norm.append(entry)
+    today, week = filter_by_date(norm, date_str)
     return {
         "today_tags": [it.get("version", "?") for it in today],
         "week_tags": [it.get("version", "?") for it in week],
