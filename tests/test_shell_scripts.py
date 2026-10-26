@@ -53,6 +53,28 @@ class ShellScriptTest(unittest.TestCase):
         # 版本比较会去掉 v 前缀
         self.assertIn("sed", content)
 
+    def test_self_update_delegates_to_python(self):
+        """.sh 有 Python 时必须委托 .py，避免两套更新逻辑走偏。"""
+        sh = read("self_update.sh")
+        self.assertIn("self_update.py", sh)
+        self.assertIn("exec python", sh)
+
+    def test_self_update_py_exists_and_cross_platform(self):
+        """Python 版自更新必须存在，且不依赖 unzip/rsync/curl。"""
+        py = os.path.join(SCRIPTS, "self_update.py")
+        self.assertTrue(os.path.isfile(py))
+        content = open(py, encoding="utf-8").read()
+        self.assertIn("zipfile", content)       # 自己解压，不依赖 unzip
+        self.assertNotIn("subprocess", content)  # 不调任何外部命令（不依赖 rsync/curl）
+        self.assertIn("urllib.request", content)
+
+    def test_self_update_version_reads_top_level(self):
+        """版本解析必须顶层优先（技能市场只读顶层 version）。"""
+        py = os.path.join(SCRIPTS, "self_update.py")
+        content = open(py, encoding="utf-8").read()
+        self.assertIn("^version:", content)          # 顶层优先
+        self.assertIn("version:\\s*", content)       # 兼容缩进回退
+
     def test_github_publish_keywords(self):
         content = read("github-publish.sh")
         self.assertIn("trap", content)

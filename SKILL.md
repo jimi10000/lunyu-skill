@@ -2,7 +2,7 @@
 name: lunyu
 display_name: 论语 · 企业级研发流水线
 display_name_en: "Lunyu - Enterprise R&D Pipeline"
-version: "1.1.4"
+version: "1.1.5"
 description: |
   以《论语》为工程价值观内核的企业级研发流水线：叩其两端定需求、名正言顺划范围、工欲善其事出方案、
   三人行做开源预研、文质彬彬写代码、学而时习之自测单测、见贤思齐做 CR 评审、温故知新归档版本、
@@ -22,7 +22,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.1.4"
+  version: "1.1.5"
   author: workbuddy
 ---
 
@@ -439,15 +439,35 @@ python scripts/report.py list
 
 **交付物**：`## 【交付物：日报】` / `## 【交付物：周报】` / `## 【交付物：项目总结】`
 
-## 自更新（已安装用户）
+## 自更新 / 升级（已安装用户）
 
-lunyu 本地技能不会静默自动更新。已安装用户运行一条命令即可从 GitHub 拉最新版覆盖：
+lunyu 本地技能不会静默自动更新。**无论你是 zip 安装包解压安装的，还是 git clone 安装的**，一条命令即可升级：
 
 ```bash
+# 推荐：跨平台（Windows / macOS / Linux 全通，零依赖，不要求装 unzip/rsync）
+python scripts/self_update.py
+
+# 只看有没有新版，不改任何文件
+python scripts/self_update.py --check
+
+# 非交互直接升级（适合脚本/CI）
+python scripts/self_update.py --yes
+
+# bash 用户也可用 .sh（检测到 Python 会自动委托给 .py，两者逻辑唯一）
 bash scripts/self_update.sh
 ```
 
-脚本会对比本地与远端版本号，有新版才更新，并保留 `.lunyu/` 数据文件。环境变量 `LUNYU_FORCE=1` 可强制更新。
+行为：对比本地与远端的 `SKILL.md` 版本号 → 有新版才下载覆盖 → **保留 `.lunyu/` 用户数据**（缺陷台账/报告都在里面）→ 清理远端已删除的旧文件（加 `--no-prune` 可关闭）。
+
+特点：
+
+- **zip 安装包也能升**：走 HTTP 下载覆盖，不依赖目录里的 `.git`，`git pull` 用不了的场景照样升
+- **多源回退**：GitHub raw → raw CDN → GitHub API，任一通即可；国内网络不稳时可设 `LUNYU_MIRROR` 指向镜像
+- **不会降级**：远端版本 ≤ 本地时直接提示已是最新
+
+环境变量：`LUNYU_REPO`（仓库地址）、`LUNYU_BRANCH`（默认 main）、`LUNYU_MIRROR`（镜像站）、`LUNYU_FORCE=1`（强制重装）。
+
+升级失败时（网络不通），手动下载 `https://github.com/jimi10000/lunyu-skill/releases` 最新版 zip，解压覆盖到技能目录即可，`.lunyu/` 别删。
 
 ---
 
@@ -483,11 +503,12 @@ bash scripts/self_update.sh
 | `build_apk.sh` | Gradle 打包 APK + md5 | 发版前 |
 | `vm_test.sh` | Android 模拟器冒烟测试 | 发版前 |
 | `github-publish.sh` | 一键建 GitHub 仓库并推送（PAT） | 开源新项目 |
-| `self_update.sh` | 一键自更新技能包（对比版本号，保留 .lunyu） | 已安装用户升级 |
+| `self_update.py` | 自更新技能包（跨平台，zip 安装也能升，保留 .lunyu） | 已安装用户升级 |
+| `self_update.sh` | 自更新入口（有 Python 时委托 .py，无 Python 走 bash 兜底） | 已安装用户升级 |
 
 ## 单元测试
 
-`tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，104 个用例）：
+`tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，127 个用例）：
 
 ```bash
 python tests/run_tests.py          # 或

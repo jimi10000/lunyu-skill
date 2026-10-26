@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.5] - 2026-10-26
+
+### Added
+
+- **`self_update.py`**：新增跨平台自更新脚本（Python 标准库，零依赖）。**用 zip 安装包解压安装的用户现在也能一键升级**——走 HTTP 下载覆盖，不依赖目录里的 `.git`，`git pull` 用不了的场景照样升
+  - 支持 `--check`（只检查不改文件）/ `--yes`（非交互）/ `--force`（强制重装）/ `--no-prune`（保留旧文件）
+  - 更新前后自动备份并还原 `.lunyu/` 用户数据（缺陷台账、报告都在里面）
+  - 清理远端已删除的旧文件（旧 `.sh` 版因本机无 `rsync` 做不到，会残留垃圾文件）
+  - **多源回退**：GitHub raw → raw CDN → GitHub API，任一通即可；支持 `LUNYU_MIRROR` 指向镜像站，缓解国内直连不稳
+  - 版本比较走语义化元组，远端不比本地新就不更新，**不会降级**
+
+### Fixed
+
+- **`self_update.sh` 版本读取缺陷（定时炸弹）**：原先用 `grep -E '^\s+version:'` 只匹配**带缩进**的那行，读的其实是 `metadata` 子层版本；顶层 `version`（技能市场要求新增的）会被跳过，一旦只有顶层就会读到 `0.0.0` 误判为「有新版」；且 `\s` 在 BSD/macOS grep 下不被支持，同样会读空。已改为「顶层优先、缩进回退」双保险，并使用 POSIX 安全的 `[[:space:]]`
+- **`self_update.sh`**：检测到本机有 Python 时直接委托 `self_update.py`，避免两套实现逻辑走偏；无 Python 时才走纯 bash 兜底，并明确提示旧文件未清理
+
 ## [1.1.4] - 2026-10-26
 
 ### Fixed

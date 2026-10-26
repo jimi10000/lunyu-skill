@@ -3,46 +3,58 @@
 # self_update.sh — 一键自更新 lunyu 技能包
 #
 # 已安装用户运行本脚本，自动从 GitHub 拉取最新版并覆盖本地技能目录。
-# 让「更新」从手动拷贝变成一条命令。
+# 适用于「zip 安装包解压安装」的用户（目录里没有 .git，git pull 不可用），
+# git clone 安装的用户同样可用。
 #
 # 用法:
-#   ./scripts/self_update.sh
+#   ./scripts/self_update.sh [--check] [--yes] [--force]
 #
 # 行为:
-#   1. 定位本技能根目录（脚本所在目录的上一级）
-#   2. 检查当前版本（SKILL.md frontmatter metadata.version）
-#   3. 从 GitHub 拉取远端最新版本号
-#   4. 有新版则下载 zip 并解压覆盖（保留 .lunyu 数据文件）
-#   5. 无新版则提示已是最新
+#   1. 若本机有 Python，直接委托给 scripts/self_update.py（逻辑唯一，跨平台最稳）
+#   2. 无 Python 时走纯 bash 兜底：curl 下载 zip + unzip 覆盖（保留 .lunyu 数据）
 #
-# 环境变量:
-#   LUNYU_REPO    GitHub 仓库（默认 https://github.com/jimi10000/lunyu-skill）
-#   LUNYU_BRANCH  分支（默认 main）
-#   LUNYU_FORCE=1 强制更新（跳过版本比较）
-#
-# 退出码: 0=已是最新或更新成功 / 1=失败
+# 退出码: 0=已是最新或更新成功 / 1=失败 / 2=有新版本(--check)
 # ============================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# ---------- 优先委托给 Python 版（逻辑唯一，避免两套实现走偏） ----------
+if command -v python >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/self_update.py" ]; then
+  exec python "$SCRIPT_DIR/self_update.py" "$@"
+fi
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/self_update.py" ]; then
+  exec python3 "$SCRIPT_DIR/self_update.py" "$@"
+fi
+
+# ===================== 以下为无 Python 环境的纯 bash 兜底 =====================
 REPO="${LUNYU_REPO:-https://github.com/jimi10000/lunyu-skill}"
 BRANCH="${LUNYU_BRANCH:-main}"
 FORCE="${LUNYU_FORCE:-0}"
 
-# ---------- 定位技能根目录 ----------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-SKILL_NAME="$(basename "$SKILL_DIR")"
-
 echo "技能目录: $SKILL_DIR"
 
-# ---------- 读取本地版本 ----------
+# ---------- 版本号解析（POSIX 安全正则，不用 \s） ----------
+# 优先级：frontmatter 顶层 version:  >  缩进的 metadata.version
+# 注意：技能市场解析器只读顶层，本地也必须以顶层为准；
+#       旧包可能只写在 metadata 子层，故保留回退。
+extract_version() {
+  local v
+  v=$(grep -E '^version:[[:space:]]*"?[0-9]' 2>/dev/null | head -1 \
+      | sed -E 's/^version:[[:space:]]*"?([^"]*)"?.*/\1/')
+  if [ -z "$v" ]; then
+    v=$(grep -E '^[[:space:]]+version:[[:space:]]*"?[0-9]' 2>/dev/null | head -1 \
+        | sed -E 's/.*version:[[:space:]]*"?([^"]*)"?.*/\1/')
+  fi
+  printf '%s' "$v"
+}
+
 LOCAL_VERSION=""
 if [ -f "$SKILL_DIR/SKILL.md" ]; then
-  LOCAL_VERSION=$(grep -E '^\s+version:' "$SKILL_DIR/SKILL.md" | head -1 | sed -E 's/.*version:\s*"?([^"]*)"?/\1/')
+  LOCAL_VERSION=$(extract_version < "$SKILL_DIR/SKILL.md")
 fi
-if [ -z "$LOCAL_VERSION" ]; then
-  LOCAL_VERSION="0.0.0"
-fi
+[ -z "$LOCAL_VERSION" ] && LOCAL_VERSION="0.0.0"
 echo "本地版本: $LOCAL_VERSION"
 
 # ---------- 拉取远端版本 ----------
@@ -52,10 +64,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 echo "检查远端版本 ..."
 REMOTE_VERSION=""
 if command -v curl >/dev/null 2>&1; then
-  REMOTE_VERSION=$(curl -fsSL "$REPO/raw/$BRANCH/SKILL.md" 2>/dev/null | grep -E '^\s+version:' | head -1 | sed -E 's/.*version:\s*"?([^"]*)"?/\1/') || true
+  REMOTE_VERSION=$(curl -fsSL "$REPO/raw/$BRANCH/SKILL.md" 2>/dev/null | extract_version) || true
 fi
 if [ -z "$REMOTE_VERSION" ] && command -v powershell.exe >/dev/null 2>&1; then
-  REMOTE_VERSION=$(powershell.exe -NoProfile -Command "(Invoke-WebRequest -Uri '$REPO/raw/$BRANCH/SKILL.md' -UseBasicParsing -TimeoutSec 20).Content" 2>/dev/null | grep -E '^\s+version:' | head -1 | sed -E 's/.*version:\s*"?([^"]*)"?/\1/') || true
+  REMOTE_VERSION=$(powershell.exe -NoProfile -Command "(Invoke-WebRequest -Uri '$REPO/raw/$BRANCH/SKILL.md' -UseBasicParsing -TimeoutSec 20).Content" 2>/dev/null | extract_version) || true
 fi
 
 if [ -z "$REMOTE_VERSION" ]; then
@@ -70,7 +82,6 @@ norm() { printf '%s' "${1#v}"; }
 LOCAL_NORM="$(norm "$LOCAL_VERSION")"
 REMOTE_NORM="$(norm "$REMOTE_VERSION")"
 
-# 用 sort -V 做语义化版本比较：本地 >= 远端则不更新（避免降级）
 NEWER=$(printf '%s\n%s\n' "$REMOTE_NORM" "$LOCAL_NORM" | sort -V | head -1)
 if [ "$FORCE" != "1" ] && [ "$NEWER" = "$REMOTE_NORM" ]; then
   echo "已是最新版本 ($LOCAL_VERSION)，无需更新。"
@@ -96,12 +107,11 @@ else
 fi
 
 cd "$TMP_DIR"
-# 解压后目录名形如 lunyu-skill-main/
 unzip -q lunyu.zip
 SRC_DIR="$TMP_DIR/lunyu-skill-$BRANCH"
 if [ ! -d "$SRC_DIR" ]; then
   # 兼容 repo 名不叫 lunyu-skill 的情况
-  SRC_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "*$BRANCH" | head -1)
+  SRC_DIR=$(find "$TMP_DIR" -maxdepth 2 -type f -name SKILL.md -exec dirname {} \; | head -1)
 fi
 if [ -z "$SRC_DIR" ] || [ ! -d "$SRC_DIR" ]; then
   echo "错误: 解压后未找到源码目录"
@@ -113,15 +123,8 @@ if [ -d "$SKILL_DIR/.lunyu" ]; then
   cp -r "$SKILL_DIR/.lunyu" "$TMP_DIR/.lunyu.bak"
 fi
 
-# 覆盖（用 rsync 风格：先复制，再删多余）
+# 覆盖
 cp -r "$SRC_DIR/." "$SKILL_DIR/"
-# 清理被删除的旧文件（排除 .lunyu 和 .git）
-if command -v rsync >/dev/null 2>&1; then
-  rsync -a --delete --exclude '.lunyu' --exclude '.git' "$SRC_DIR/" "$SKILL_DIR/"
-else
-  # 无 rsync 时仅覆盖，不删除多余文件（保守）
-  :
-fi
 
 # 恢复 .lunyu 数据
 if [ -d "$TMP_DIR/.lunyu.bak" ]; then
@@ -133,4 +136,6 @@ fi
 chmod +x "$SKILL_DIR/scripts/"*.sh 2>/dev/null || true
 
 echo "更新完成: $LOCAL_VERSION -> $REMOTE_VERSION"
-echo "当前版本: $(grep -E '^\s+version:' "$SKILL_DIR/SKILL.md" | head -1 | sed -E 's/.*version:\s*"?([^"]*)"?/\1/')"
+echo "当前版本: $(extract_version < "$SKILL_DIR/SKILL.md")"
+echo "提示: 未安装 rsync/python，旧版本遗留的多余文件未自动清理；"
+echo "      如需彻底同步，建议手动下载 zip 全新解压安装。"
