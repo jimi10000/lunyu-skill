@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.9] - 2026-10-27
+
+### Added
+- **TDD 红绿重构**（对标 Matt Pocock / Superpowers）：Step 5 / Step 6 强制「先写失败测试→实现→重构」小步循环，测试先确认红再写实现
+- **系统化调试四步法**（对标 Superpowers）：复现→假设根因→最小测试证伪→只修根因；症状≠根因，禁止掩盖式补丁
+- **源码优先 source-driven**（对标 skills-hub）：动手前先读真实源码、引用给出具体文件路径，不凭空发明 API
+- 反模式 +3（凭印象写代码 / 写完再补测试从没见过红 / 遇 bug 上来就试改）
+
 ## [1.2.8] - 2026-10-27
 
 ### Added
