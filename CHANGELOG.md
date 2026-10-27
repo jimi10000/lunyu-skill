@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.7] - 2026-10-27
+
+### Added
+- **横切诸则扩展**：通读《论语》对照现有设计，新增 7 条工程化原则入「横切诸则」（原七则实为 8 条，现正名）：
+  - 欲速则不达（反对赶工省略流程）
+  - 工欲善其事，必先利其器（开工先备环境/依赖/工具链）
+  - 多闻阙疑，慎言其余（调研存疑留空、不凭一知半解下断言）
+  - 质胜文则野，文胜质则史（功能与可读性平衡）
+  - 君子不器（角色弹性 + 守住边界）
+  - 小不忍则乱大谋（决策克制、别为小问题动架构）
+  - 学而时习之（沉淀后要周期性复用验证）
+- 反模式新增 6 条与上述对应（赶工跳流程 / 凭一知半解下断言 / 功能与可读性失衡 / 遇小问题冲动改架构 / 沉淀不复用验证）。
+
 ## [1.2.6] - 2026-10-27
 
 ### Added
