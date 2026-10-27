@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.6] - 2026-10-27
+
+### Added
+- **输出风格纪律「辞达而已矣」**：回答直接给结果/结论/动作，不铺垫、不客套、不重复；锚定到横切七则与反模式（绕圈子半天不给结论列为反模式）。
+
 ## [1.2.5] - 2026-10-27
 
 ### Added
