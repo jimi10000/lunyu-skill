@@ -416,7 +416,7 @@ lunyu 本地技能不会静默自动更新。**无论 zip 安装包解压安装�
 
 ## 单元测试
 
-`tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，294 个用例）：`python tests/run_tests.py`（或 `python -m unittest discover -s tests -v`）。修改脚本后请先跑测试再提交，防止回归。
+仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，294 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。修改脚本后请先跑测试再提交，防止回归。
 
 ## 规模自适应
 

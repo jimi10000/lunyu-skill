@@ -33,8 +33,8 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL_ROOT = os.path.dirname(HERE)
 
-EXCLUDE_DIRS = {".git", "__pycache__", ".lunyu", "dist", ".pytest_cache", ".idea", ".vscode"}
-EXCLUDE_FILES = {".gitignore", ".DS_Store", ".lunyu-manifest.json"}
+EXCLUDE_DIRS = {".git", "__pycache__", ".lunyu", "dist", ".pytest_cache", ".idea", ".vscode", "docs", "tests"}
+EXCLUDE_FILES = {".gitignore", ".DS_Store", ".lunyu-manifest.json", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE"}
 EXCLUDE_SUFFIX = (".pyc", ".pyo", ".tmp", ".bak", ".orig")
 MANIFEST_NAME = ".lunyu-manifest.json"
 MANIFEST_VERSION = 1

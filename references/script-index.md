@@ -56,11 +56,6 @@ python scripts/patrol.py --due-days 7       # 缺陷超期阈值
 
 ## 单元测试
 
-`tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，294 个用例）：
-
-```bash
-python tests/run_tests.py          # 或
-python -m unittest discover -s tests -v
-```
+仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，294 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。
 
 修改脚本后请先跑测试再提交，防止回归。
