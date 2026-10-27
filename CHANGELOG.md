@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.4] - 2026-10-27
+
+### Changed
+
+- **「知之为知之」总则补强为「主动联网搜索」**：从「不许编造」升级为「遇到不会 / 不确定的问题先联网检索权威资料（官方文档 / 社区 / 论文 / 源码），基于查证结果回答；搜不到才如实声明『未验证』，绝不凭印象编造」。落到 `SKILL.md` 横切七则、总则专节与反模式（新增「不搜索就瞎编 / 不懂装懂」红线）
+
 ## [1.2.3] - 2026-10-27
 
 ### Added
