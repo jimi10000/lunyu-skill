@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-10-27
+
+### Added
+
+- **工程根目录绝对路径锁死**：在「工程标识锁死」基础上补齐落盘路径维度——需求确认单新增「工程根目录绝对路径（含盘符）」字段，**一次定死、全生命周期不变**；流水线重跑 / 换机器 / 定时任务触发都落到同一绝对路径，**禁止跨盘符、跨目录漂移（C 盘 D 盘乱跳属红线）**。落到 `templates/02-需求确认单.md`、`templates/03-技术方案文档.md`、`references/step-details.md` 对齐维度与运行纪律，以及 `SKILL.md` 反模式（新增「换盘符换根目录」红线）
+- **运行纪律**：明确 lunyu 脚本运行前必须 `cd` 到项目根或显式传 `--root <绝对路径>`，禁止依赖 CWD 隐式定位（曾因计划任务 CWD=System32 导致 `.lunyu/` 写错位置）
+
 ## [1.2.1] - 2026-10-27
 
 ### Added
