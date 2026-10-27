@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.5] - 2026-10-27
+
+### Added
+
+- **智能自进化（元进化闭环）**：lunyu 从「只帮项目攒经验」升级为「让技能自身越长越聪明」——运行 / 踩坑 / 用户纠正得来的东西回流成技能规则。新增 `scripts/evolve.py`（从经验库提取 `skill:true` / 高权重条目，生成「应上升为技能规则」提案 `.lunyu/evolution-proposals.md`）；`SKILL.md` 新增「智能自进化」小节与反模式（踩坑不复盘回流=重复犯错），`references/step-details.md` 新增专节，`references/script-index.md` 登记 evolve（19→20 项）
+
 ## [1.2.4] - 2026-10-27
 
 ### Changed

@@ -1,6 +1,6 @@
 # 脚本完整索引
 
-> 自 SKILL.md 下沉：19 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
+> 自 SKILL.md 下沉：20 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
 
 全部位于 `scripts/`，纯标准库无外部依赖。
 
@@ -25,6 +25,7 @@
 | `self_update.py` | 自更新技能包（跨平台，zip 安装也能升，保留 .lunyu） | 已安装用户升级 |
 | `self_update.sh` | 自更新入口（有 Python 时委托 .py，无 Python 走 bash 兜底） | 已安装用户升级 |
 | `pack.py` | 打包技能包 zip + 生成自更新清单 + 出 sha256（排除 .git/缓存/工作数据） | 发布技能包时 |
+| `evolve.py` | 智能自进化：从经验库提取 `skill:true`/高权重条目，生成「应上升为技能规则」提案（`.lunyu/evolution-proposals.md`） | 复盘 / 被纠正后 |
 
 ---
 

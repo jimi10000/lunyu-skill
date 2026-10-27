@@ -370,3 +370,13 @@ python scripts/lessons.py add --scene "<故障场景>" --problem "<根因>" \
 2. **开工即同步**：任何 agent 动手前先 `git fetch` 并基于锁定分支最新 HEAD 建工作分支，禁止拿"手头碰巧有的那份旧代码"开工。
 3. **责任区 + 独立分支**：并行时按文件 / 模块划责任区，各自 `feature/<模块>-<负责人>` 分支，互不踩踏；冲突靠 PR + CR 收敛，不靠谁后提交谁赢。
 4. **落盘唯一**：呼应「工程根目录绝对路径（锁死）」——所有 agent 落到确认单指定的同一个绝对路径，不各存各的。
+
+---
+
+## 智能自进化（技能元进化）
+
+lunyu 的自我改进闭环：运行 → 经验入库（lessons，标 `skill:true`）→ 复盘 / 被纠正时 evolve 提取 → 合并进 SKILL.md / references / templates → bump 版本。
+
+- 任何「下次照做」的结论、反模式、用户纠正，先入经验库并标 `skill:true`
+- `python scripts/evolve.py`：扫描 lessons（项目 + 全局），输出「建议上升为技能规则」清单（`.lunyu/evolution-proposals.md`）
+- 候选经确认后合入技能定义；用户的纠正优先、最高优先级
