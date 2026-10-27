@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.8] - 2026-10-27
+
+### Added
+- **横切诸则再扩 12 条**（通读《论语》二次筛选，已采条目 23 → 35）：
+  - 敏于事而慎于言（多做少说交付优先）
+  - 慎终追远（决策变更可追溯 / ADR）
+  - 不愤不启，不悱不发（启发式协助不包办）
+  - 逝者如斯夫，不舍昼夜（时效优先不拖延）
+  - 岁寒，然后知松柏之后凋（恶劣条件自测）
+  - 君子周而不比（协作开放不搞小圈子）
+  - 德不孤，必有邻（质量自传播）
+  - 道不同不相为谋（选型看价值观/技术栈契合）
+  - 信近于义，言可复也（承诺可实现）
+  - 言忠信，行笃敬（言行一致）
+  - 君子欲讷于言而敏于行（少承诺多交付）
+  - 三军可夺帅，匹夫不可夺志（架构原则坚定）
+- 反模式 +7 条对应上述（多表态少交付 / 决策不留痕 / 替人包办 / 拖延 / 只测正常路径 / 排期吹牛 / 架构原则动摇）。
+
 ## [1.2.7] - 2026-10-27
 
 ### Added
