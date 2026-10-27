@@ -2,7 +2,7 @@
 name: lunyu
 display_name: 论语 · 企业级研发流水线
 display_name_en: "Lunyu - Enterprise R&D Pipeline"
-version: "1.2.2"
+version: "1.2.3"
 description: |
   以《论语》为工程价值观内核的企业级研发流水线：叩其两端定需求、名正言顺划范围、工欲善其事出方案、
   三人行做开源预研、文质彬彬写代码、学而时习之自测单测、见贤思齐做 CR 评审、温故知新归档版本、
@@ -27,7 +27,7 @@ description_en: "Lunyu-style enterprise R&D pipeline with bug ledger and release
 license: MIT
 metadata:
   category: engineering
-  version: "1.2.2"
+  version: "1.2.3"
   author: workbuddy
 ---
 
@@ -383,6 +383,7 @@ lunyu 本地技能不会静默自动更新。**无论 zip 安装包解压安装�
 - 把《论语》原文大段抄进交付物当装饰
 - **小改动硬走 12 步流程**（用 `flow.py` 判通道）
 - **中途随意改名换包名、或换盘符换根目录（C 盘 D 盘乱跳）**（工程标识与根目录绝对路径一旦确认即锁死，变更须走变更流程并评估连锁影响）
+- **多 AI / 多人并行时各自用旧源码、各存各的目录、或同时改同一文件互相覆盖**（源码以 git 为唯一事实源，开工先同步基线、划责任区、走独立分支 + CR）
 - **已知问题藏着不报**（过而不改，是谓过矣 —— 沉默的已知问题会变成别人的事故）
 
 > 完整 28 条反模式见 `references/anti-patterns.md`

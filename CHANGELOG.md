@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.3] - 2026-10-27
+
+### Added
+
+- **多 AI / 多人协作一致性纪律**：补齐「工程标识锁死」未覆盖的协作盲区——不同 AI agent 并行开发时禁止（1）各自基于旧源码开工「版本基线漂移」、（2）同时改同一文件互相覆盖、（3）各存各的目录。新增「唯一事实源（git 仓库）/ 开工即同步基线 / 责任区 + 独立分支 / 落盘唯一」四条纪律，落到 `templates/02-需求确认单.md`「协作约定（含多 AI 并行）」、`references/step-details.md` 专节、`SKILL.md` 反模式
+
 ## [1.2.2] - 2026-10-27
 
 ### Added
