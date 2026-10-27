@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-10-27
+
+### Added
+
+- **工程标识锁死纪律**：流水线新增「工程标识（包名 / 命名空间 / Application ID / GroupId-ArtifactId 等）一次定死、全生命周期不变」规则——需求确认单确认即生效，流水线重新跑一遍不会重新生成或变更工程标识；中途改名换包名视为范围大改，须走需求变更记录并评估对依赖引用 / CI / 发布产物的连锁影响。落到 `templates/01-待确认需求清单.md`、`templates/02-需求确认单.md`、`templates/03-技术方案文档.md`、`references/step-details.md` 与 `SKILL.md` 反模式
+
+### Fixed
+
+- **包名固化**：`scripts/pack.py` 与 `scripts/self_update.py` 的包名改从 `SKILL.md` 顶层 `name` 单一来源派生（zip 文件名、包内顶层目录、自更新下载 URL 四处一致）；`pack.py --name` 传不一致只警告不生效，`self_update.py` 不再硬编码 `lunyu-*.zip`
+
 ## [1.2.0] - 2026-10-27
 
 ### Added

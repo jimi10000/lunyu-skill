@@ -176,10 +176,24 @@ def fetch_remote_version():
     return ""
 
 
-def download_zip(dest_dir, remote_version):
+def read_local_skill_name(skill_dir):
+    """读已安装技能 SKILL.md 顶层 name（包名固化：决定自更新下载 URL）。"""
+    path = os.path.join(skill_dir, "SKILL.md")
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r"^name:[ \t]*[\"']?([A-Za-z0-9._-]+)[\"']?[ \t]*$", text, re.M)
+    if not m:
+        m = re.search(r"^[ \t]+name:[ \t]*[\"']?([A-Za-z0-9._-]+)[\"']?[ \t]*$", text, re.M)
+    return m.group(1).strip() if m else None
+
+
+def download_zip(dest_dir, remote_version, pkg_name="lunyu"):
     """下载最新版压缩包并解压，返回源码根目录。
 
     优先 Release 附件（干净的技能包），失败则回退分支归档。
+    Release 附件名由已安装技能的 name 派生（包名固化），不写死 lunyu。
     """
     candidates = []
     mirror = os.environ.get("LUNYU_MIRROR", "").strip().rstrip("/")
@@ -188,7 +202,7 @@ def download_zip(dest_dir, remote_version):
     if remote_version:
         tag = remote_version if remote_version.startswith("v") else "v" + remote_version
         candidates.append(
-            "%s/releases/download/%s/lunyu-%s.zip" % (REPO, tag, tag)
+            "%s/releases/download/%s/%s-%s.zip" % (REPO, tag, pkg_name, tag)
         )
     candidates.append("%s/archive/refs/heads/%s.zip" % (REPO, BRANCH))
 
@@ -453,6 +467,9 @@ def main(argv=None):
 
     print("技能目录: %s" % skill_dir)
 
+    pkg_name = read_local_skill_name(skill_dir) or "lunyu"
+    print("技能包名: %s（包名固化，自更新下载 URL 由其派生）" % pkg_name)
+
     with open(os.path.join(skill_dir, "SKILL.md"), encoding="utf-8") as f:
         local_version = parse_version(f.read()) or "0.0.0"
     print("本地版本: %s" % local_version)
@@ -486,7 +503,7 @@ def main(argv=None):
         tmp = tempfile.mkdtemp(prefix="lunyu-update-")
         try:
             print("下载 %s ..." % remote_version)
-            src = download_zip(tmp, remote_version)
+            src = download_zip(tmp, remote_version, pkg_name=pkg_name)
             print("安装覆盖 ...")
             written, removed = apply_update(
                 skill_dir, src, prune=not args.no_prune
