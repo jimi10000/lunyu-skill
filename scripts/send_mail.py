@@ -136,18 +136,27 @@ def _parse_args(argv):
     for arg in argv:
         if arg in ("--verbose", "-v"):
             verbose = True
+        elif arg in ("--help", "-h"):
+            positional.append(arg)
         else:
             positional.append(arg)
     return verbose, positional
+
+
+def _print_help():
+    print("用法: python send_mail.py <附件路径> <邮件主题> <正文文件> [--verbose]")
+    print("环境变量: SMTP_SERVER/SMTP_PORT/SMTP_SENDER/SMTP_AUTH/SMTP_RECEIVER/SMTP_SSL")
+    print("退出码: 0=成功 / 1=失败")
 
 
 def main(argv=None):
     """入口。argv 为完整参数列表（含程序名），默认取 sys.argv。"""
     argv = list(sys.argv if argv is None else argv)
     verbose, args = _parse_args(argv[1:])
-    if len(args) < 3:
-        print("用法: python send_mail.py <附件路径> <邮件主题> <正文文件> [--verbose]")
-        print("环境变量: SMTP_SERVER/SMTP_PORT/SMTP_SENDER/SMTP_AUTH/SMTP_RECEIVER/SMTP_SSL")
+    if "--help" in args or "-h" in args or len(args) < 3:
+        _print_help()
+        if "--help" in args or "-h" in args:
+            return 0
         return 1
     try:
         body_file = args[2]

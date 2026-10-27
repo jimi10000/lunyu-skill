@@ -33,7 +33,7 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL_ROOT = os.path.dirname(HERE)
 
-EXCLUDE_DIRS = {".git", "__pycache__", ".lunyu", "dist", ".pytest_cache", ".idea", ".vscode", "docs", "tests"}
+EXCLUDE_DIRS = {".git", "__pycache__", ".lunyu", "dist", ".pytest_cache", ".idea", ".vscode", "docs", "tests", ".github"}
 EXCLUDE_FILES = {".gitignore", ".DS_Store", ".lunyu-manifest.json", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE"}
 EXCLUDE_SUFFIX = (".pyc", ".pyo", ".tmp", ".bak", ".orig")
 MANIFEST_NAME = ".lunyu-manifest.json"
@@ -87,6 +87,36 @@ def sha256_of(path):
     return h.hexdigest()
 
 
+def _run_pack_check(root):
+    """调用 pack_check.py 做打包前清单双向校验，返回其退出码。"""
+    import subprocess
+    check_script = os.path.join(HERE, "pack_check.py")
+    try:
+        proc = subprocess.run(
+            [sys.executable, check_script, "--root", root],
+            cwd=SKILL_ROOT,
+        )
+        return proc.returncode
+    except OSError as e:
+        print("警告: 无法运行打包校验: %s" % e)
+        return None
+
+
+def _run_version_check(root):
+    """调用 check_version.py 做打包前版本一致性校验，返回其退出码。"""
+    import subprocess
+    ver_script = os.path.join(HERE, "check_version.py")
+    try:
+        proc = subprocess.run(
+            [sys.executable, ver_script, "--root", root],
+            cwd=SKILL_ROOT,
+        )
+        return proc.returncode
+    except OSError as e:
+        print("警告: 无法运行版本校验: %s" % e)
+        return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="打包 lunyu 技能包（zip + 自更新清单 + sha256）")
     ap.add_argument("--root", default=SKILL_ROOT, help="技能根目录（默认脚本上一级）")
@@ -94,6 +124,7 @@ def main():
     ap.add_argument("--version", default=None, help="覆盖版本号（默认读 SKILL.md）")
     ap.add_argument("--name", default=None, help="包内顶层目录名（默认读 SKILL.md 顶层 name，固化；传不一致只警告）")
     ap.add_argument("--no-manifest", action="store_true", help="不生成清单文件")
+    ap.add_argument("--no-check", action="store_true", help="跳过打包前清单双向校验（仅调试用）")
     args = ap.parse_args()
 
     root = os.path.abspath(args.root)
@@ -112,6 +143,20 @@ def main():
     if args.name and args.name != pkg_name:
         print(u"警告: --name=%r 与 SKILL.md 顶层 name=%r 不一致，按固化规则采用 SKILL.md 的"
               % (args.name, pkg_name))
+
+    # 第三条第 6 项：打包前先做清单双向校验，失败即中断
+    if not args.no_check:
+        check = _run_pack_check(root)
+        if check is not None and check != 0:
+            print("错误: 打包清单校验未通过，禁止打包（--no-check 可跳过，仅调试用）")
+            return 1
+
+    # 第三条第 7 项：打包前校验版本四处一致（SKILL.md 顶层/metadata/README 徽章/CHANGELOG 顶部）
+    if not args.no_check:
+        _rc = _run_version_check(root)
+        if _rc != 0:
+            print("错误: 版本一致性校验未通过，禁止打包（--no-check 可跳过，仅调试用）")
+            return 1
 
     out_dir = os.path.abspath(args.out or os.path.join(root, "dist"))
     os.makedirs(out_dir, exist_ok=True)

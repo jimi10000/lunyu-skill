@@ -1,9 +1,15 @@
-# Changelog
+# CHANGELOG
 
-All notable changes to this project will be documented in this file.
+格式遵循 [Keep a Changelog](https://keepachangelog.com/), 版本号遵循 [SemVer](https://semver.org/)。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/),
-and this project adheres to [Semantic Versioning](https://semver.org/).
+## [1.2.10] - 2026-10-27
+
+### Changed
+- **包结构拍平为两级**（平台兼容整改）：平台包仅含 `lunyu/SKILL.md` + `references/scripts/templates` 三个可选子目录，`docs/`、`tests/` 与根级元数据（README/CHANGELOG/CONTRIBUTING/LICENSE）不进技能包，`pack.py` 打包时映射排除
+- **脚本体检**：`--help` 全部返回 0（修复 `send_mail.py` 将 `--help` 当位置参数返回 1 的问题）；失败路径必须非零退出
+- **打包清单双向校验**：新增 `scripts/pack_check.py` 接入打包流程——正向校验正文引用的文件全部进包，反向校验包内文件都有归属（被正文引用 / script-index 兜底 / 清单 / 种子数据），缺失即中断打包
+- **版本一致性工具**：新增 `scripts/check_version.py`（校验 SKILL.md 顶层 version = metadata.version = README 徽章 = CHANGELOG 顶部，不一致返回非零）与 `scripts/bump.py`（一次改齐四处版本号并打印建议 tag）
+- 版本号由 `bump.py` 统一提升 1.2.9 → 1.2.10（chore → patch）
 
 ## [1.2.9] - 2026-10-27
 

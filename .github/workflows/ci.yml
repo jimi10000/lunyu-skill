@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 版本一致性校验（SKILL.md 顶层 / metadata / README 徽章 / CHANGELOG 顶部）
+        run: python scripts/check_version.py
+
+      - name: README 徽章自动同步（与 SKILL.md 顶层 version 不一致时自动写回）
+        run: |
+          set -e
+          SKILL_VER=$(python - <<'EOF'
+import re
+text = open("SKILL.md", encoding="utf-8").read()
+m = re.search(r"^version:[ \t]*[\"']?([0-9][^\"'\r\n]*)[\"']?[ \t]*$", text, re.M)
+print(m.group(1).strip() if m else "")
+EOF
+          )
+          echo "SKILL.md version: $SKILL_VER"
+          python - "$SKILL_VER" <<'EOF'
+import re, sys
+ver = sys.argv[1]
+path = "README.md"
+text = open(path, encoding="utf-8").read()
+new_text, n = re.subn(r"badge/version-[0-9]+\.[0-9]+\.[0-9]+", "badge/version-" + ver, text)
+if n:
+    open(path, "w", encoding="utf-8").write(new_text)
+    print("README 徽章已自动同步为", ver)
+else:
+    print("README 徽章未找到，跳过")
+EOF
+          git diff --exit-code README.md || echo "⚠ README 徽章已被 CI 自动同步，请本地重新运行 bump.py 或提交该改动"
+
+      - name: 打包清单双向校验（正向引用齐全 + 反向文件有归属）
+        run: python scripts/pack_check.py
+
+      - name: 全部脚本 --help 必须返回 0
+        run: |
+          set -e
+          for f in scripts/*.py; do
+            echo "== $f =="
+            python "$f" --help >/dev/null
+          done
+
+      - name: 单元测试（仓库 tests/，不进技能包）
+        run: python tests/run_tests.py
+
+      - name: 试打包（验证 pack.py 在打包前自动跑 pack_check + check_version）
+        run: python scripts/pack.py --out /tmp/lunyu-ci.zip

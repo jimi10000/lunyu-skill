@@ -1,14 +1,63 @@
 # 论语 · 企业级研发流水线
 
-> 以《论语》为工程价值观内核的企业级研发流水线。需求评审 → 方案设计 → 开源预研 → 编码 → 自测 → CR → 版本归档 → 风险评估 → 复盘。内置分类日志系统、密钥扫描、缺陷工单台账、发布回滚。
+> **一句话定位**：把企业研发流程（需求→方案→编码→自测→评审→归档→复盘）压缩成一套 AI 可执行的 12 步流水线，每一步都有脚本和交付物模板，让 AI 不只是「写个函数」，而是「陪你走完一个完整迭代」。
 
 > 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.10-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
 
 ---
+
+## 触发场景
+
+以下场景最适合直接使用本技能：
+
+- 你要**写代码 / 开发功能 / 重构 / 搭项目**，希望按正规流程走一遍（需求澄清→技术方案→编码→自测→CR→归档）
+- 你要处理 **bug / 缺陷 / 事故**，需要登记台账、根因分析、防复发闭环
+- 你要**发版本 / 打 tag / 写 CHANGELOG / 回滚**，需要版本归档与回滚预案
+- 你要**日报 / 周报 / 项目总结**，希望自动汇总 `.lunyu/` 里的台账、存档、CHANGELOG
+- 你希望 AI **踩过的坑能沉淀复用**（经验库）、**没人催也主动巡检**（自驱体检）
+
+**不适用**：一行修复、纯代码解释问答、只读代码、用户明确说不需要流程的一次性脚本（此时应走快速通道或直接跳过）。
+
+## 30 秒上手
+
+```bash
+# 1. 接到需求先判通道（别把 30 行脚本走成 12 步）
+python scripts/flow.py
+
+# 2. 写代码时接入分类日志（非一次性脚本必做）
+python scripts/logkit.py init --lang python --dest ./src/logkit
+
+# 3. 提交前扫密钥/调试残留（可装成 pre-commit 钩子）
+python scripts/preflight.py
+
+# 4. 自测发现缺陷立刻登记（P0-P3 + 根因防复发）
+python scripts/bug_ledger.py add --title "空数组越界" --priority P1
+
+# 5. 发版：一条命令生成存档+CHANGELOG+tag/回滚
+python scripts/release_note.py tag --version 1.0.0 --summary "首个版本"
+
+# 6. 每天下班前自动出日报
+python scripts/report.py daily --project "我的项目" --body "完成发布链路"
+```
+
+> 完整命令见下文「脚本一览」与 `references/command-cookbook.md`。
+
+## 前后对比
+
+> 📊 占位：此处放一张「无流程 vs 有流程」对比图（如：散落的需求/代码/文档 vs 统一 `.lunyu/` 台账 + 可追溯版本链）。待补充。
+
+| 维度 | 没有 lunyu | 有 lunyu |
+|---|---|---|
+| 需求 | 口头对齐，做完发现理解偏了 | 需求确认单 + In/Out Scope + 验收标准 |
+| 方案 | 直接开写，为什么选这个说不清 | 技术方案含设计取舍 + ADR 决策留痕 |
+| 编码 | 凭印象写，API 对不上真实工程 | 源码优先 + TDD 红绿重构 + 分类日志 |
+| 自测 | 「应该能跑」 | 实际运行 + 密钥扫描 + 缺陷台账 |
+| 发版 | 版本号乱跳，回滚靠猜 | 存档 + CHANGELOG + tag/回滚预案 |
+| 复盘 | 踩过的坑再踩一次 | 经验库沉淀 + 巡检复用 |
 
 ## 为什么做这个
 
