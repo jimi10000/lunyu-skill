@@ -18,6 +18,8 @@
   7. [中]   CR 意见提了没闭环
   8. [中]   复盘纪要里的待办没打勾
   9. [低]   昨日「明日计划」没兑现
+  10. [低]  文档落后于代码（源码改了，文档没跟上）
+  11. [低]  交接文档 HANDOVER.md 过期
 
 退出码: 0=无阻断项 / 1=存在阻断项（有未关闭 P0/P1）
 适合挂定时任务或 CI，作为项目健康度门禁。
@@ -359,6 +361,88 @@ LEVEL_LABEL = {
 }
 
 
+def check_docs_stale(root, stale_days):
+    """文档落后于代码 —— 新人按文档做全是错的。
+
+    判定：源码目录里最近改过的文件，比文档最后修改时间晚 stale_days 天以上。
+    只看时间戳，不猜内容；没有文档或有文档没源码都不误报。
+    """
+    doc_names = ("README.md", "readme.md", "README.MD")
+    docs = []
+    for name in doc_names:
+        p = os.path.join(root, name)
+        if os.path.exists(p):
+            docs.append(p)
+    docs_dir = os.path.join(root, "docs")
+    if os.path.isdir(docs_dir):
+        try:
+            docs.extend(os.path.join(docs_dir, f) for f in os.listdir(docs_dir)
+                        if f.endswith(".md"))
+        except OSError:
+            pass
+    if not docs:
+        return None
+
+    skip = {".git", "node_modules", ".venv", "__pycache__", "dist", "build",
+            "target", "vendor", ".lunyu", ".idea", ".vscode", "docs", "logs"}
+    code_ext = {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go",
+                ".rs", ".rb", ".php", ".cs", ".c", ".cpp", ".h", ".swift"}
+    newest_code = None
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
+        for fn in filenames:
+            if os.path.splitext(fn)[1].lower() in code_ext:
+                try:
+                    mt = datetime.fromtimestamp(os.path.getmtime(os.path.join(dirpath, fn)))
+                except OSError:
+                    continue
+                if newest_code is None or mt > newest_code:
+                    newest_code = mt
+    if newest_code is None:
+        return None
+
+    oldest_doc, oldest_mt = None, None
+    for p in docs:
+        try:
+            mt = datetime.fromtimestamp(os.path.getmtime(p))
+        except OSError:
+            continue
+        if oldest_mt is None or mt < oldest_mt:
+            oldest_doc, oldest_mt = p, mt
+    if oldest_mt is None:
+        return None
+
+    gap = (newest_code - oldest_mt).days
+    if gap <= stale_days:
+        return None
+    return ("low", "文档落后于代码",
+            "源码最近改动的日期比最早更新的文档（%s）晚 %d 天（阈值 %d 天）。\n"
+            "  文档写完就没人更新，新人按文档做全是错的。\n"
+            "  处理: 核对文档描述与当前实现是否一致，不一致就改文档或改代码。"
+            % (os.path.relpath(oldest_doc, root), gap, stale_days))
+
+
+def check_handover_stale(root, stale_days):
+    """交接文档过期 —— 换 AI / 新会话接手时读到的是旧状态，等于没有。
+
+    有 HANDOVER.md 但很久没更新就提醒；没有的话不误报（不是每个项目都要）。
+    """
+    p = os.path.join(root, "HANDOVER.md")
+    if not os.path.exists(p):
+        return None
+    try:
+        mt = datetime.fromtimestamp(os.path.getmtime(p))
+    except OSError:
+        return None
+    gap = (datetime.now() - mt).days
+    if gap <= stale_days:
+        return None
+    return ("low", "交接文档过期",
+            "HANDOVER.md 已 %d 天没更新（阈值 %d 天），接手的人会读到过时状态。\n"
+            "  更新: python scripts/handover.py --step <第几步> --note \"下一步要做什么\""
+            % (gap, stale_days))
+
+
 def run_checks(root, due_days, stale_days):
     results = []
     for fn in (
@@ -371,6 +455,8 @@ def run_checks(root, due_days, stale_days):
         lambda: check_open_cr_comments(root),
         lambda: check_review_todos(root),
         lambda: check_yesterday_plan_unfulfilled(root),
+        lambda: check_docs_stale(root, stale_days),
+        lambda: check_handover_stale(root, max(stale_days // 3, 3)),
     ):
         try:
             r = fn()

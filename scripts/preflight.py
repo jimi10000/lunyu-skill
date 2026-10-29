@@ -115,7 +115,31 @@ RISKY_PACKAGES = {
     "node-uuid": "已废弃, 建议迁移到 uuid",
     "event-stream": "曾发生供应链投毒事件(event-stream 3.3.6)",
     "eslint-scope": "曾发生供应链投毒事件(eslint-scope 3.7.2)",
+    # 已弃维护 / 官方宣布 EOL（B4 依赖体检）
+    "moment": "官方宣布进入维护模式, 建议迁移到 date-fns / Day.js",
+    "tslint": "已停止维护, 官方建议迁移到 ESLint",
+    "babel-preset-es2015": "已废弃, 改用 @babel/preset-env",
+    "vue-cli": "已停止维护, 建议迁移到 Vite",
+    "python-dateutil": "维护缓慢, 简单场景可用 datetime 标准库替代",
+    "flask-script": "已废弃, 建议用 Flask CLI",
+    "left-pad": "已废弃的著名案例, 勿再用",
 }
+# 传染性开源协议：商业项目混入会构成合规风险
+COPYLEFT_LICENSES = {
+    "gpl-2.0", "gpl-3.0", "gpl-2.0-only", "gpl-3.0-only", "gpl-2.0-or-later",
+    "gpl-3.0-or-later", "agpl-3.0", "agpl-3.0-only", "agpl-3.0-or-later",
+    "sspl-1.0", "eupl-1.2", "cc-by-sa-4.0",
+}
+# 生产分支名（这些分支上出现测试/本地地址要提醒）
+PROD_BRANCHES = ("main", "master", "prod", "production", "release")
+# 环境串味的标志：出现在配置里说明这配的是测试/本地环境
+NONPROD_MARKERS = ("localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.0.",
+                   "test.", "-test", "staging", "sandbox", "dev.", "-dev", "mock",
+                   "sk_test_", "pk_test_")
+# 配置类文件（环境地址最常混在这些里）
+CONFIG_FILES = (".env", ".env.local", ".env.production", ".env.test", "env.yaml",
+                "env.yml", "config.yaml", "config.yml", "application.properties",
+                "application.yml", "settings.py", "config.py", ".env.example")
 SBOM_DIR = ".lunyu"
 SBOM_FILE = "sbom.json"
 
@@ -549,6 +573,87 @@ HOOK_BACKUP = "pre-commit.lunyu.bak"
 HOOK_MARKER = "lunyu-pre-commit-hook"
 
 
+def scan_copyleft_licenses(root, rep):
+    """依赖协议体检（B4）：从 lockfile 里找传染性协议，商业项目混入会构成合规风险。
+
+    只扫 npm 的 package-lock.json（v2/v3 的 packages 段带 license 字段）；
+    没有 lockfile 或读不到就优雅跳过，不误报。
+    """
+    lock = os.path.join(root, "package-lock.json")
+    if not os.path.exists(lock):
+        return []
+    try:
+        with open(lock, "r", encoding="utf-8", errors="ignore") as f:
+            data = json.load(f)
+    except (ValueError, OSError):
+        return []
+    packages = data.get("packages")
+    hits = []
+    if isinstance(packages, dict):
+        for key, meta in packages.items():
+            if not isinstance(meta, dict):
+                continue
+            lic = str(meta.get("license") or "").strip().lower()
+            if lic in COPYLEFT_LICENSES:
+                hits.append((key.replace("node_modules/", ""), lic))
+    elif isinstance(data.get("dependencies"), dict):
+        for name, meta in data["dependencies"].items():
+            if not isinstance(meta, dict):
+                continue
+            lic = str(meta.get("license") or "").strip().lower()
+            if lic in COPYLEFT_LICENSES:
+                hits.append((name, lic))
+    if hits:
+        show = ", ".join("%s(%s)" % (n, l) for n, l in hits[:5])
+        rep.warn("传染性协议依赖 %d 项: %s —— 商业闭源项目需法务确认" % (len(hits), show))
+    return hits
+
+
+def scan_env_config(root, rep):
+    """环境配置校验（A5）：防止「连错库 / 用错 key」这类不可逆事故。
+
+    查两件事:
+      1. 生产分支上出现测试/本地地址 —— 上线即用错环境
+      2. .env 类文件被 git 跟踪 —— 一旦推送，凭据就公开了
+    """
+    code, branch = git_out(root, ["rev-parse", "--abbrev-ref", "HEAD"])
+    branch = (branch or "").strip() if code == 0 else ""
+    is_prod = branch.lower() in PROD_BRANCHES
+
+    # 1) 生产分支上混杂测试/本地地址
+    if is_prod:
+        found = []
+        for fn in CONFIG_FILES:
+            p = os.path.join(root, fn)
+            if not os.path.exists(p):
+                continue
+            try:
+                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                    text = f.read()
+            except OSError:
+                continue
+            low = text.lower()
+            for marker in NONPROD_MARKERS:
+                if marker in low:
+                    found.append("%s(%s)" % (fn, marker))
+                    break
+        if found:
+            rep.warn("生产分支 `%s` 上的配置文件出现测试/本地环境标志: %s "
+                     "—— 确认是不是配错了环境" % (branch, "、".join(found[:5])))
+
+    # 2) .env 被 git 跟踪
+    code, tracked = git_out(root, ["ls-files"])
+    if code == 0 and tracked:
+        env_tracked = [l.strip() for l in tracked.splitlines()
+                       if l.strip().split("/")[-1].startswith(".env")
+                       and not l.strip().endswith(".example")
+                       and not l.strip().endswith(".sample")]
+        if env_tracked:
+            rep.block("`.env` 类文件已被 git 跟踪: %s —— 推送后凭据即公开，"
+                      "立即 `git rm --cached` 并加入 .gitignore" % "、".join(env_tracked[:5]))
+    return branch
+
+
 def git_out(root, args):
     """执行 git 命令, 返回 (returncode, stdout.strip())"""
     try:
@@ -702,6 +807,7 @@ def main():
     ap.add_argument("--json", action="store_true", help="JSON 输出")
     ap.add_argument("--skip-secrets", action="store_true")
     ap.add_argument("--skip-deps", action="store_true", help="跳过依赖扫描")
+    ap.add_argument("--skip-env", action="store_true", help="跳过环境与配置校验")
     # 子命令可选: 不传时仍是完整扫描, 保证旧用法不变
     sub = ap.add_subparsers(dest="command", metavar="{install-hook,uninstall-hook}")
     for name, helptext in (("install-hook", "安装 git pre-commit 钩子, 让自检自动跑"),
@@ -737,8 +843,11 @@ def main():
     scan_large_files(root, rep)
     scan_debug(root, rep)
     scan_gitignore(root, rep)
+    if not args.skip_env:
+        scan_env_config(root, rep)
     if not args.skip_deps:
         scan_deps(root, rep)
+        scan_copyleft_licenses(root, rep)
 
     lang, lint, typ, test = detect_project(root)
     if lang:

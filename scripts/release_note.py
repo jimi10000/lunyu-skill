@@ -117,22 +117,32 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def collect_artifacts(paths):
-    """采集产物摘要: 文件名/大小/sha256。
+def collect_artifacts(paths, origin=None):
+    """采集产物摘要: 文件名/大小/sha256/构建溯源(commit+分支+时间)。
+
+    溯源解决「发出去的包对应哪次提交」——两周后出问题找不到源码是最痛的。
+    origin 由调用方传入（cmd_tag 里已经查过 git，不重复查）；
+    缺 commit 就记一条 failure 提醒，不中断打版。
 
     返回 (records, failures)。文件缺失或读不动只记 failure，不中断打版。
     """
     recs, failures = [], []
+    origin = dict(origin or {})
+    origin.setdefault("built_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    if not origin.get("commit"):
+        failures.append(("<origin>", "缺少 commit sha，产物无法溯源到源码"))
     for p in paths or []:
         try:
             if not os.path.isfile(p):
                 failures.append((p, "文件不存在"))
                 continue
-            recs.append({
+            rec = {
                 "name": os.path.basename(p),
                 "size": os.path.getsize(p),
                 "sha256": sha256_file(p),
-            })
+            }
+            rec.update(origin)
+            recs.append(rec)
         except (OSError, ValueError) as e:
             failures.append((p, str(e) or "读取失败"))
     return recs, failures
@@ -227,7 +237,13 @@ def cmd_tag(args):
     bugs = collect_closed_bugs(root, version)
     blockers = open_blockers(root)
 
-    artifacts, bad_artifacts = collect_artifacts(getattr(args, "artifact", None) or [])
+    artifact_origin = {
+        "commit": sha or "",
+        "branch": args.branch or branch or "",
+        "dirty": bool(dirty),
+    }
+    artifacts, bad_artifacts = collect_artifacts(
+        getattr(args, "artifact", None) or [], artifact_origin)
     prev_version = data["releases"][-1]["version"] if data["releases"] else None
 
     bug_ids = [b["id"] for b in bugs]

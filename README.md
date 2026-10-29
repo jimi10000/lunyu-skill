@@ -5,7 +5,7 @@
 > 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.10-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
 
 ---
@@ -201,10 +201,11 @@ lunyu/
 ├── references/                     # 详细参考文档（按需加载）
 │   ├── git-release.md              # 分支模型/Conventional Commits/SemVer/回滚
 │   ├── bug-triage.md               # P0-P3分级/状态流转/根因归类
-│   ├── review-checklist.md         # 七维度CR清单 + 意见写法
-│   ├── deliverable-templates.md    # 10个交付物骨架模板
+│   ├── review-checklist.md         # 九维度CR清单（含安全/性能/工艺）+ 意见写法
+│   ├── deliverable-templates.md    # 17个交付物骨架模板
 │   ├── logging-observability.md    # 分类日志规范 + 可观测性
-│   └── quality-gates.md            # 质量门禁金字塔 + 事故复盘
+│   ├── quality-gates.md            # 质量门禁金字塔 + 事故复盘
+│   └── code-craft.md               # 代码工艺：语言最佳实践/代码异味/重构手法/安全与性能反模式
 └── scripts/                       # 可执行脚本（纯标准库，零依赖）
     ├── flow.py                     # 判通道：按改动规模+敏感路径
     ├── logkit.py                   # 生成分类日志系统到目标项目
@@ -222,8 +223,16 @@ lunyu/
     ├── lessons.py                      # 经验库（自学习：踩坑沉淀+检索复用）
     ├── patrol.py                       # 主动巡检（自驱力：不等指令自己体检）
     ├── self_update.py                  # 自更新（跨平台，zip 安装也能升）
-    └── self_update.sh                  # 自更新入口（委托 .py / bash 兜底）
-└── tests/                         # 单元测试（unittest 零依赖，332 个用例）
+    ├── self_update.sh                  # 自更新入口（委托 .py / bash 兜底）
+    ├── pack.py / pack_check.py         # 合规打包 + 清单双向校验
+    ├── check_version.py / bump.py      # 版本四处一致性校验 / 一次改齐
+    ├── env_check.py                    # 环境锁：snapshot/verify 校验工具链漂移
+    ├── impact.py                       # 影响面分析：改存量代码前看谁在用它
+    ├── handover.py                     # 交接文档 HANDOVER.md（跨会话/多AI交接）
+    ├── codecraft.py                    # 代码工艺体检：重复块/长函数/嵌套/死代码
+    ├── evolve.py                       # 智能自进化：经验回流成技能规则
+    └── adr.py                          # ADR 架构决策记录
+└── tests/                         # 单元测试（unittest 零依赖，384 个用例）
     ├── run_tests.py               # 测试运行入口
     ├── test_flow.py               # flow.py 通道判定
     ├── test_logkit.py             # logkit.py 模板生成
@@ -234,7 +243,11 @@ lunyu/
     ├── test_scheduler.py          # 定时任务注册
     ├── test_send_mail.py          # SMTP 邮件
     ├── test_release.py            # 双端发布
-    └── test_shell_scripts.py      # shell 脚本完整性
+    ├── test_shell_scripts.py      # shell 脚本完整性
+    ├── test_env_check.py          # 环境锁漂移判定
+    ├── test_impact.py             # 影响面分析分桶
+    ├── test_handover.py           # 交接文档生成与读取
+    └── test_codecraft.py          # 代码工艺四项检查
 ```
 
 ## 脚本一览
@@ -258,6 +271,14 @@ lunyu/
 | `patrol.py` | 主动巡检：不等指令自己体检项目，输出待办清单 | 0=无阻断 / 1=有阻断 |
 | `self_update.py` | 自更新技能包（跨平台，zip 安装也能升，保留 .lunyu，清理旧文件） | 0=已最新/成功 / 1=失败 / 2=有新版本(--check) |
 | `self_update.sh` | 自更新入口（有 Python 时委托 .py，无 Python 走 bash 兜底） | 0=已最新/成功 / 1=失败 |
+| `pack.py` | 合规打包 zip（排除仓库开发目录），打包前跑清单+版本校验 | 0=成功 / 1=校验未过 |
+| `pack_check.py` | 打包清单双向校验：正文引用的必须进包、包内文件必须有归属 | 0=通过 / 1=有阻断 |
+| `check_version.py` | 版本四处一致性（SKILL.md/metadata/CHANGELOG/README 徽章） | 0=一致 / 1=不一致 |
+| `bump.py` | 一次改齐四处版本号，据提交信息推下一版 | 0=成功 |
+| `env_check.py` | 环境锁：snapshot 记基线 / verify 查漂移（换机器先跑） | verify: 0=一致 / 1=漂移或无基线 |
+| `impact.py` | 影响面分析：查符号被谁调用、有无测试覆盖、配置与跨仓库引用 | 0=成功 / 1=目标不存在 |
+| `handover.py` | 生成 HANDOVER.md（状态/已完成/下一步/未决决策/已知坑），`--read` 供新会话读 | 0=成功 / 1=读取时无文档 |
+| `codecraft.py` | 代码工艺体检：重复块/过长函数/嵌套过深/死代码/坏习惯 | 0=成功，`--strict` 有问题返回 1 |
 
 ## 自学习与自驱力
 
@@ -299,7 +320,7 @@ python -m unittest discover -s tests -v
 ```
 
 覆盖：通道判定、日志模板生成、密钥扫描、缺陷台账、版本存档、日报/周报/总结、
-定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 332 个用例。
+定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 384 个用例。
 
 > 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 

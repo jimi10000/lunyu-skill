@@ -40,6 +40,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import sys
 import time
 import uuid
@@ -297,11 +298,69 @@ class timed:
         else:
             self.log.debug(f"{self.action} 完成", **f)
         return False
+
+
+# ---- 脱敏: 日志里绝不能出现明文敏感信息 ----
+# 日志一泄露就是数据事故。手机号/身份证/银行卡/邮箱/token 必须打码再进日志。
+MASK_RULES = [
+    # 身份证(18位, 末位可能是 X)
+    (re.compile(r"(?<![0-9])[1-9][0-9]{5}(19|20)[0-9]{2}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{3}[0-9Xx](?![0-9])"),
+     lambda m: m.group(0)[:6] + "*" * 8 + m.group(0)[-4:]),
+    # 手机号(1 开头 11 位)
+    (re.compile(r"(?<![0-9])1[3-9][0-9]{9}(?![0-9])"),
+     lambda m: m.group(0)[:3] + "*" * 4 + m.group(0)[-4:]),
+    # 银行卡(13-19 位数字, 排除已被上面规则吃掉的)
+    (re.compile(r"(?<![0-9])[0-9]{13,19}(?![0-9])"),
+     lambda m: m.group(0)[:4] + "*" * (len(m.group(0)) - 8) + m.group(0)[-4:]),
+    # 邮箱
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+     lambda m: m.group(0)[:2] + "***@" + m.group(0).split("@")[-1]),
+]
+SENSITIVE_KEYS = ("password", "passwd", "pwd", "secret", "token", "access_key",
+                  "secret_key", "authorization", "cookie", "id_card", "idcard",
+                  "bank_card", "card_no", "phone", "mobile", "email", "credential")
+
+
+def mask(value):
+    """把敏感信息打码。日志里凡是涉及个人的字段, 一律先过这个函数。
+
+    >>> mask("13812345678")     -> '138****5678'
+    >>> mask("a@b.com")         -> 'a***@b.com'
+    """
+    if value is None:
+        return value
+    if isinstance(value, dict):
+        return {k: mask(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(mask(v) for v in value)
+    s = str(value)
+    for pat, repl in MASK_RULES:
+        s = pat.sub(repl, s)
+    return s
+
+
+def mask_fields(**fields):
+    """按字段名脱敏: 名字命中的整段打码, 其余按内容规则脱敏。
+
+    log.info("下单", **mask_fields(phone=phone, amount=amount))
+    """
+    out = {}
+    for k, v in fields.items():
+        if str(k).lower() in SENSITIVE_KEYS:
+            if isinstance(v, str) and len(v) > 4:
+                out[k] = v[:2] + "*" * (len(v) - 4) + v[-2:]
+            else:
+                out[k] = "***"
+        else:
+            out[k] = mask(v)
+    return out
 '''
 
-PY_INIT = '''from .core import get_logger, setup, trace, timed, current_trace_id, CATEGORIES
+PY_INIT = '''from .core import (get_logger, setup, trace, timed, current_trace_id,
+                   CATEGORIES, mask, mask_fields)
 
-__all__ = ["get_logger", "setup", "trace", "timed", "current_trace_id", "CATEGORIES"]
+__all__ = ["get_logger", "setup", "trace", "timed", "current_trace_id",
+           "CATEGORIES", "mask", "mask_fields"]
 '''
 
 PY_EXAMPLE = '''"""日志系统用法示例 - 照这个抄到业务代码里
@@ -437,7 +496,16 @@ setup(json_lines=True)   # 一行一条 JSON, 直接喂 ELK / Loki / 云日志
 ## 不要做
 
 - 别在循环里打 INFO 日志(日志量爆炸, 且拖慢主流程)
-- 别把密码/token/身份证打进日志(适配器不脱敏, 自己注意)
+- 别把密码/token/身份证打进日志 —— 涉及个人的字段先过 `mask_fields()`:
+
+```python
+log.info("下单成功", **mask_fields(phone=phone, id_card=id_no, amount=amount))
+# phone -> 138****5678, id_card -> 110101********1234, amount 原样
+```
+
+`mask(value)` 直接按内容规则脱敏(手机号/身份证/银行卡/邮箱), `mask_fields(**kw)` 先按字段名
+(phone/mobile/email/token/password/id_card/bank_card...) 整段打码, 其余再按内容规则过一遍。
+**日志一泄露就是数据事故, 这两个函数是兜底的, 别绕过。**
 - 别用 `print` —— 它没有级别、没有分类、没有 trace_id
 - 别在日志里拼大对象(整个 request body), 记关键字段就够
 '''
