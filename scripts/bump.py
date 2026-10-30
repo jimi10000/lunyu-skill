@@ -116,16 +116,17 @@ def main():
     changelog_text = open(changelog_path, encoding="utf-8").read()
     today = datetime.date.today().isoformat()
     new_entry = "## [%s] - %s\n\n" % (new_version, today)
+    # 插入点 = 第一个版本条目的「行首」。
+    # 早期版本在这里多做了一次 rfind 往前退一行，结果把文件头的格式说明
+    # 甩到了新版本号下面（1.2.10 / 1.4.0 两次都踩了）。直接定位行首即可：
+    # find 拿到的是 "\n## [" 里 \n 的位置，+1 才是 '#' 的行首。
     first_entry = changelog_text.find("\n## [")
     if first_entry == -1:
-        first_entry = changelog_text.find("## [")
-    if first_entry == -1:
-        # 没有版本条目，直接追加到头部说明后
-        first_entry = len(changelog_text)
+        # 文件首行就是版本条目
+        insert_at = 0 if changelog_text.startswith("## [") else len(changelog_text)
     else:
-        # 定位到 "## [" 所在行的行首
-        first_entry = changelog_text.rfind("\n", 0, first_entry) + 1
-    new_changelog = changelog_text[:first_entry] + new_entry + changelog_text[first_entry:]
+        insert_at = first_entry + 1
+    new_changelog = changelog_text[:insert_at] + new_entry + changelog_text[insert_at:]
 
     if args.dry_run:
         print("当前版本: %s" % current)

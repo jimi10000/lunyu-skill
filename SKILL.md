@@ -2,7 +2,7 @@
 name: lunyu
 display_name: 论语 · 企业级研发流水线
 display_name_en: "Lunyu - Enterprise R&D Pipeline"
-version: "1.3.0"
+version: "1.4.0"
 description: |
   以《论语》为工程价值观内核的企业级研发流程门禁：需求评审→技术方案→开源预研→编码→自测→评审→版本归档→风险评估→复盘。
   按改动规模自动分快/标准/完整三通道，不把小事套成 12 步。内置分类日志生成器、提交前密钥扫描、缺陷台账、事故复盘、
@@ -23,7 +23,7 @@ author: workbuddy
 
 ```yaml
 # 版本元信息（check_version / bump 的同步锚点，勿删除）
-  version: "1.3.0"
+  version: "1.4.0"
   category: engineering
   author: workbuddy
 ```
@@ -227,6 +227,20 @@ Step0 合规 → Step1 澄清 → Step2 范围 → Step3 方案 → Step4 预研
 
 **输出**：`## 【交付物：技术方案文档】`（模板 `templates/03-技术方案文档.md`）+ `.lunyu/decisions/` 决策记录
 
+### 3.2 拆成可验证的小任务（欲速则不达）
+
+方案定了不要一把梭写到底——**先拆任务，每个任务写清「怎么算做完」**：
+
+```bash
+python scripts/plan.py new --title "抽出支付校验函数" --acceptance "pay.py 新增 validate() 且 run_tests.py 全绿"
+python scripts/plan.py list                     # 看进度
+python scripts/plan.py done 1 --evidence "run_tests.py 384 全绿"   # 做完带证据打勾
+python scripts/plan.py gate                     # 全部完成才放行（可挂 CI）
+```
+
+**没写验收点的任务等于没拆**——你永远不知道它到底做完没有。大任务一把梭是翻车头号姿势。
+多任务推进前先判依赖关系，独立任务才可并行（见 `references/parallel-performance.md`）。
+
 ## Step 4 · 三人行：开源预研
 
 **当需要选型/预研时，按以下步骤检索开源方案：**
@@ -283,6 +297,33 @@ Step0 合规 → Step1 澄清 → Step2 范围 → Step3 方案 → Step4 预研
 - 分支模型、命令、反模式详见 `references/git-release.md`
 
 **输出**：可运行源码（含分类日志接入）+ 推荐 commit 信息 + 分支操作命令
+
+### 5.3 陌生代码库先定位，别瞎找（必也正名乎）
+
+接手不熟悉的代码，**先找到东西在哪再动手**：
+
+```bash
+python scripts/locate.py --keyword "支付"      # 这个功能在哪实现（文件名>定义处>引用 排序）
+python scripts/locate.py --entry               # 程序入口点在哪
+python scripts/locate.py --route "/api/pay"    # 路由定义在哪
+python scripts/locate.py --config "db.host"    # 配置项在哪定义、在哪被读
+```
+
+找不到就瞎改，是接手老项目最大的隐性风险。`impact.py` 回答「我改了影响谁」，
+`locate.py` 回答「我要找的在哪」——两个方向都要有。
+
+### 5.4 并行推进必须隔离（君子不立于危墙之下）
+
+**多个 AI / 多个会话同时改同一个仓库，必须开隔离工作区**，否则互相覆盖且互不知情：
+
+```bash
+python scripts/worktree.py create feat/pay-refactor --from main
+python scripts/worktree.py list                 # 有几个工作区、干不干净
+python scripts/worktree.py remove feat/pay-refactor --drop-branch
+```
+
+同一时间**同一个文件只能有一个 AI 在改**。派子任务前先确认两件事真独立（改不同模块、不共享状态），
+共享同一文件的绝对不要并行。详见 `references/parallel-performance.md`。
 
 ## Step 6 · 学而时习之：质量左移 + 自测 + 缺陷登记
 
@@ -364,6 +405,17 @@ PR 描述必含：需求背景、改动范围、自测情况、关联版本基�
 
 ——说「这段在并发下会重复扣款」，不说「你怎么连并发都没考虑」。每条意见**必须标是否阻断**（`阻断` / `建议` / `纯风格`），**纯风格类意见不阻断合并**，否则 CR 退化成风格霸凌。
 
+### 7.1 收到评审意见：先验证，再回应（法语之言，改之为贵）
+
+**禁止「你说得对，我改」** —— 无脑全盘接受会把正确的代码改错。收到意见先做三件事：
+
+1. **复现** —— 按对方描述的路径，真的会发生吗？
+2. **读代码** —— 那行前后文是什么？有没有他没看到的保护逻辑？
+3. **判断** —— 【必须改】/【可以改】/【不成立】
+
+不成立就**带证据反驳**（给代码位置 + 证明），不是抬杠；成立就改，改完说清改了哪、有没有补测试。
+每条意见都要有回应，**不能改了三条、沉默五条**。完整规程见 `references/receiving-review.md`。
+
 **法语之言，改之为贵**：每条「必须修改」的意见登记进缺陷台账（标关联 PR），**全部关闭才允许合并**——意见提了没人改，CR 就退化成走过场。
 
 **输出**：PR/MR 描述文本 + `## 【交付物：CR评审意见单】`（模板 `templates/10-CR评审意见单.md`）+ 更新后台账 → **G3 门禁**
@@ -441,7 +493,25 @@ PR 描述必含：需求背景、改动范围、自测情况、关联版本基�
 
 堆到九成停下来，前面的功夫全白费——**最后 10% 才是决定成败的那一篑**。收尾前逐项确认：交付物齐不齐（**构建产物/安装包 + md5 不能少**）、质量动作做没做（自测实际跑过、`preflight.py` 扫过、缺陷已登记、版本基线已记录）、已知问题说没说、能不能退回去、别人接得住吗。
 
-### 过而不改，是谓过矣（已知未闭环必须声明）
+### 过而不改，是谓过矣（已知未闭环必须声明）### 11.0 完成前必须拿出证据（听其言而观其行）
+
+**没跑过验证命令，不许说做完了。** 这是 AI 辅助开发第一大坑——声称完成实则没验证。
+
+```bash
+python scripts/verify.py check                 # 跑测试 + preflight + 构建 + 交付物，出证据
+python scripts/verify.py check --strict        # 加跑代码工艺体检
+python scripts/verify.py record --item "真机实测" --result pass --evidence "截图 xxx.png"
+python scripts/verify.py require --item tests  # 交付前要求某项必须有通过记录
+```
+
+脚本会**实际执行**项目里的测试命令（自动探测：项目自带入口 > Makefile > 生态默认），
+把退出码和输出存进 `.lunyu/verify.json` 当证据。**项目没有对应能力就跳过（不误报），
+有能力却没跑过就判「未验证」并阻断交付。**
+
+脚本跑不到的（UI 效果、真机实测、人工验收）用 `record` 手工登记，**必须填证据**——
+「通过」没有证据等于没验证。
+
+
 
 **交付时必须显式列出「已知未闭环项」**——没修的缺陷、没做的检查、跳过的步骤、遗留的技术债，每一项写清 **是什么 / 为什么这次不做 / 什么时候补 / 不补会怎样**。发现问题不是错，**发现问题捂着不说才是错**：沉默的已知问题会变成下一个人的事故。
 
@@ -489,12 +559,16 @@ lunyu 本地技能不会静默自动更新。**无论 zip 安装包解压安装�
 | `handover.py` | 生成 HANDOVER.md 交接文档（状态/已完成/下一步/未决决策/已知坑） | 收尾时、换 AI 时 |
 | `codecraft.py` | 代码工艺体检：重复代码块/过长函数/嵌套深/死代码/坏习惯 | Step 5/7 |
 | `pack_check.py` | 打包清单双向校验（引用文件必须进包 + 包内文件必须有归属） | 出包前 |
+| `verify.py` | **完成前验证**：实际跑测试/preflight/构建，出证据，未验证不许交付 | **声称完成前必跑** |
+| `plan.py` | 拆成带验收点的小任务，逐步打勾，`gate` 全部完成才放行 | Step 3 拆任务 / 执行中 |
+| `locate.py` | 陌生代码库定位：找实现在哪 / 入口点 / 路由 / 配置项 | Step 5 接手不熟悉代码时 |
+| `worktree.py` | 隔离工作区（git worktree 封装），多需求与多 AI 并行互不污染 | 并行推进前 |
 
-> 完整 27 项脚本索引（adr / report / scheduler / release / patrol / self_update / pack / evolve / pack_check 等）与 patrol 巡检项见 `references/script-index.md`
+> 完整 31 项脚本索引（adr / report / scheduler / release / patrol / self_update / pack / evolve / pack_check 等）与 patrol 巡检项见 `references/script-index.md`
 
 ## 单元测试
 
-仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，384 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。修改脚本后请先跑测试再提交，防止回归。
+仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，444 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。修改脚本后请先跑测试再提交，防止回归。
 
 ## 规模自适应
 

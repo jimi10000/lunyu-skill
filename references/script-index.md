@@ -1,6 +1,6 @@
 # 脚本完整索引
 
-> 自 SKILL.md 下沉：26 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
+> 自 SKILL.md 下沉：31 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
 
 全部位于 `scripts/`，纯标准库无外部依赖。
 
@@ -33,6 +33,10 @@
 | `handover.py` | 交接文档：生成/更新 `HANDOVER.md`（当前状态/已完成/下一步/未决决策/已知坑），`--read` 供新会话开工读 | **每个会话开工与收尾** |
 | `codecraft.py` | 代码工艺机器查：重复代码块/过长函数/嵌套过深/未引用导出（专治 AI 造轮子和堆死代码） | Step 5 编码后 / Step 7 CR |
 | `evolve.py` | 智能自进化：从经验库提取 `skill:true`/高权重条目，生成「应上升为技能规则」提案（`.lunyu/evolution-proposals.md`） | 复盘 / 被纠正后 |
+| `verify.py` | **完成前验证**：自动探测并实际执行测试命令 + preflight + 构建，结果存 `.lunyu/verify.json` 当证据；有能力没跑过判「未验证」并阻断；`record` 手工登记（要带证据）、`require` 交付前校验某项 | **声称完成前必跑** |
+| `plan.py` | 拆成带验收点的小任务（`new`/`list`/`start`/`done`/`show`/`reset`/`set-acceptance`/`clear`/`gate`），验收点必填，`gate` 全部完成才放行 | Step 3 拆任务 / 执行中 |
+| `locate.py` | 陌生代码库定位：`--keyword`（找实现在哪）/ `--entry`（入口点）/ `--route`（路由定义）/ `--config`（配置项） | Step 5 接手不熟悉代码时 |
+| `worktree.py` | 隔离工作区（git worktree 封装）：`create` / `list` / `path` / `remove` / `prune`，多需求与多 AI 并行互不污染 | 并行推进前 |
 
 ---
 
@@ -65,6 +69,6 @@ python scripts/patrol.py --due-days 7       # 缺陷超期阈值
 
 ## 单元测试
 
-仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，384 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。
+仓库 `tests/` 下为全部 Python 脚本提供 `unittest` 测试（零依赖，444 个用例）。**该目录不进技能包**，是仓库开发者的回归保障；已安装技能不含测试目录。
 
 修改脚本后请先跑测试再提交，防止回归。

@@ -1,6 +1,27 @@
 # CHANGELOG
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/), 版本号遵循 [SemVer](https://semver.org/)。
+
+## [1.4.0] - 2026-10-30
+
+### Added
+- **`verify.py` —— 完成前验证（证据先于声明）**：没跑过验证命令不许说做完了。自动探测项目测试命令（项目自带入口 > Makefile test 目标 > 生态默认）并**实际执行**，连同 preflight、构建、交接文档、已知未闭环声明一起检查，结果存 `.lunyu/verify.json` 当证据。项目没对应能力就跳过（不误报），有能力却没跑过判「未验证」并阻断交付。`record` 供脚本跑不到的（真机实测/UI验收）手工登记（强制填证据），`require` 交付前校验某项必须有通过记录
+- **`plan.py` —— 任务拆解 + 检查点**：方案定了不许一把梭，先拆成小任务，**每个任务必须写验收点**（没写验收点的任务等于没拆）。`new`/`list`/`start`/`done`/`show`/`reset`/`set-acceptance`/`clear`/`gate`，`--from` 可从 md 的 `- [ ]` 批量导入，`gate` 全部完成且有验收点才放行（可挂 CI）
+- **`locate.py` —— 陌生代码库正向定位**：`--keyword`（这功能在哪实现，文件名命中 > 定义处 > 普通引用排序，测试文件降权）、`--entry`（程序入口点）、`--route`（路由定义，可按路径过滤）、`--config`（配置项在哪定义、在哪被读）。`impact.py` 回答「我改了影响谁」，本脚本回答「我要找的在哪」
+- **`worktree.py` —— 隔离工作区**：git worktree 封装，`create`/`list`/`path`/`remove`/`prune`。**多个 AI / 多个会话同时改同一仓库必须隔离**，否则互相覆盖且互不知情。有未提交改动时 `remove` 会阻断（删了就没了）
+- **`references/receiving-review.md`**：收到评审意见先验证再回应，**禁止「你说得对，我改」**（无脑全盘接受会把正确的代码改错）。复现 → 读代码 → 判断，不成立就带证据反驳；每条意见都要有回应，不能改三条沉默五条
+- **`references/parallel-performance.md`**：并行协作（何时必须隔离、派子任务三要素、多 AI 三条硬纪律）+ 性能先测量后优化（**没有测量结果不许优化**，看 p95 不看 avg，常见真瓶颈按频率排序）
+
+### Changed
+- SKILL.md 注入五条新规则：Step 3.2 拆任务、**Step 5.3 陌生代码库先定位**、**Step 5.4 并行推进必须隔离**、Step 7.1 收到意见先验证、**Step 11.0 完成前必须拿出证据**
+
+### Fixed
+- **`locate.py` 路由名取错**：捕获组里混着变量名（`router`）和 HTTP 方法（`get`），旧逻辑取第一个组把 `router` 当成路由路径，导致 `--route` 过滤全失效。改为优先取以 `/` 开头的组
+
+### Tests
+- 新增 `test_verify.py` / `test_plan.py` / `test_locate.py` / `test_worktree.py`，用例数 384 → 444
+
+
 ## [1.3.0] - 2026-10-30
 
 ### Added

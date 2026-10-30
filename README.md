@@ -5,7 +5,7 @@
 > 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
 
 ---
@@ -205,7 +205,9 @@ lunyu/
 │   ├── deliverable-templates.md    # 17个交付物骨架模板
 │   ├── logging-observability.md    # 分类日志规范 + 可观测性
 │   ├── quality-gates.md            # 质量门禁金字塔 + 事故复盘
-│   └── code-craft.md               # 代码工艺：语言最佳实践/代码异味/重构手法/安全与性能反模式
+│   ├── code-craft.md               # 代码工艺：语言最佳实践/代码异味/重构手法/安全与性能反模式
+│   ├── receiving-review.md         # 收到CR意见：先验证再回应，禁止表演性同意
+│   └── parallel-performance.md     # 并行协作隔离 + 性能先测量后优化
 └── scripts/                       # 可执行脚本（纯标准库，零依赖）
     ├── flow.py                     # 判通道：按改动规模+敏感路径
     ├── logkit.py                   # 生成分类日志系统到目标项目
@@ -231,8 +233,12 @@ lunyu/
     ├── handover.py                     # 交接文档 HANDOVER.md（跨会话/多AI交接）
     ├── codecraft.py                    # 代码工艺体检：重复块/长函数/嵌套/死代码
     ├── evolve.py                       # 智能自进化：经验回流成技能规则
+    ├── verify.py                       # 完成前验证：跑测试出证据，未验证不许交付
+    ├── plan.py                         # 拆成带验收点的小任务 + 检查点
+    ├── locate.py                       # 陌生代码库定位：实现/入口/路由/配置
+    ├── worktree.py                     # 隔离工作区（多AI并行互不污染）
     └── adr.py                          # ADR 架构决策记录
-└── tests/                         # 单元测试（unittest 零依赖，384 个用例）
+└── tests/                         # 单元测试（unittest 零依赖，444 个用例）
     ├── run_tests.py               # 测试运行入口
     ├── test_flow.py               # flow.py 通道判定
     ├── test_logkit.py             # logkit.py 模板生成
@@ -247,7 +253,11 @@ lunyu/
     ├── test_env_check.py          # 环境锁漂移判定
     ├── test_impact.py             # 影响面分析分桶
     ├── test_handover.py           # 交接文档生成与读取
-    └── test_codecraft.py          # 代码工艺四项检查
+    ├── test_codecraft.py          # 代码工艺四项检查
+    ├── test_verify.py             # 完成前验证与证据留存
+    ├── test_plan.py               # 任务拆解与验收点门禁
+    ├── test_locate.py             # 代码定位四种模式
+    └── test_worktree.py           # 隔离工作区增删查
 ```
 
 ## 脚本一览
@@ -279,6 +289,10 @@ lunyu/
 | `impact.py` | 影响面分析：查符号被谁调用、有无测试覆盖、配置与跨仓库引用 | 0=成功 / 1=目标不存在 |
 | `handover.py` | 生成 HANDOVER.md（状态/已完成/下一步/未决决策/已知坑），`--read` 供新会话读 | 0=成功 / 1=读取时无文档 |
 | `codecraft.py` | 代码工艺体检：重复块/过长函数/嵌套过深/死代码/坏习惯 | 0=成功，`--strict` 有问题返回 1 |
+| `verify.py` | **完成前验证**：自动探测并实际跑测试/preflight/构建，出证据，未验证不许交付 | 0=通过 / 1=有失败或未验证 |
+| `plan.py` | 拆成带验收点的小任务，逐步打勾 | `gate` 有未完成返回 1 |
+| `locate.py` | 陌生代码库定位：找实现/入口点/路由/配置项 | 0=找到或明确没找到 / 1=目录不存在 |
+| `worktree.py` | 隔离工作区（git worktree 封装），多需求多 AI 并行 | 0=成功 / 1=失败 |
 
 ## 自学习与自驱力
 
@@ -320,7 +334,7 @@ python -m unittest discover -s tests -v
 ```
 
 覆盖：通道判定、日志模板生成、密钥扫描、缺陷台账、版本存档、日报/周报/总结、
-定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 384 个用例。
+定时任务、SMTP 邮件、双端发布、shell 脚本完整性，共 444 个用例。
 
 > 🔒 **安全提示**：所有脚本的凭据（GitHub PAT、Gitee token、SMTP 授权码）一律通过**环境变量**或**命令行参数**传入，脚本内零硬编码。请通过环境变量 `GITHUB_USER` / `GITHUB_TOKEN` / `GITHUB_REPO` / `GITEE_USER` / `GITEE_TOKEN` / `GITEE_REPO` / `SMTP_SENDER` / `SMTP_AUTH` / `SMTP_RECEIVER` 配置你的账号信息，不要把真实账号硬编码进脚本。
 
