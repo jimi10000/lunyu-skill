@@ -1,6 +1,6 @@
 # 脚本完整索引
 
-> 自 SKILL.md 下沉：31 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
+> 自 SKILL.md 下沉：32 项脚本全表、patrol 巡检项、单元测试入口。按需加载。
 
 全部位于 `scripts/`，纯标准库无外部依赖。
 
@@ -37,6 +37,7 @@
 | `plan.py` | 拆成带验收点的小任务（`new`/`list`/`start`/`done`/`show`/`reset`/`set-acceptance`/`clear`/`gate`），验收点必填，`gate` 全部完成才放行 | Step 3 拆任务 / 执行中 |
 | `locate.py` | 陌生代码库定位：`--keyword`（找实现在哪）/ `--entry`（入口点）/ `--route`（路由定义）/ `--config`（配置项） | Step 5 接手不熟悉代码时 |
 | `worktree.py` | 隔离工作区（git worktree 封装）：`create` / `list` / `path` / `remove` / `prune`，多需求与多 AI 并行互不污染 | 并行推进前 |
+| `loop_guard.py` | **失控自检**：`log` 记轨迹 / `check` 查循环·反复失败·无进展·超预算（退出码 1 必须停）/ `report` 出含原因分析与决策点的诊断报告 / `reset` / `budget` | **全程护栏，卡住即停** |
 
 ---
 

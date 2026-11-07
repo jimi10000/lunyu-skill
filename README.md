@@ -5,7 +5,7 @@
 > 📌 **第一次接触本项目？** 先看 [`项目介绍.md`](项目介绍.md) —— 一页讲清「这是什么、解决什么、怎么用」。本文件是面向开发者/贡献者的完整说明。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](CHANGELOG.md)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-green)](https://skills.sh)
 
 ---
@@ -19,6 +19,7 @@
 - 你要**发版本 / 打 tag / 写 CHANGELOG / 回滚**，需要版本归档与回滚预案
 - 你要**日报 / 周报 / 项目总结**，希望自动汇总 `.lunyu/` 里的台账、存档、CHANGELOG
 - 你希望 AI **踩过的坑能沉淀复用**（经验库）、**没人催也主动巡检**（自驱体检）
+- 你受够了 AI **卡住了还闷头重试**：同一命令跑五遍、同一个错误撞三次、烧完 token 还把「还在调」说成「基本完成」——失控自检会检测循环并主动停下来报告 + 分析原因
 
 **不适用**：一行修复、纯代码解释问答、只读代码、用户明确说不需要流程的一次性脚本（此时应走快速通道或直接跳过）。
 
@@ -42,13 +43,27 @@ python scripts/release_note.py tag --version 1.0.0 --summary "首个版本"
 
 # 6. 每天下班前自动出日报
 python scripts/report.py daily --project "我的项目" --body "完成发布链路"
+
+# 7. 卡住了别硬扛：检测循环 / 反复失败，主动出诊断报告
+python scripts/loop_guard.py check
+python scripts/loop_guard.py report --out .lunyu/失控报告.md
 ```
 
 > 完整命令见下文「脚本一览」与 `references/command-cookbook.md`。
 
 ## 前后对比
 
-> 📊 占位：此处放一张「无流程 vs 有流程」对比图（如：散落的需求/代码/文档 vs 统一 `.lunyu/` 台账 + 可追溯版本链）。待补充。
+| 环节 | 没有流程 | 用论语 |
+|---|---|---|
+| 接需求 | 直接开写，边写边问 | `flow.py` 判通道，小事 5 步、大事 12 步 |
+| 环境 | 「我这儿能跑」 | `env_check.py` 锁工具链，漂移先报 |
+| 改老代码 | 改完才发现有下游 | `impact.py` 先看谁在调用 |
+| 自测 | 只测正常路径，说「应该没问题」 | 四维自测 + `verify.py` 实际跑命令出证据 |
+| 卡住 | 同一命令重试五遍，还闷着 | `loop_guard.py` 检测循环，停下来报告并分析原因 |
+| 交付 | 口头说「做完了」 | 交付清单逐项打勾 + 已知未闭环显式声明 |
+| 归档 | 压缩包不知对应哪次提交 | `release_note.py` 产物绑 commit sha + sha256 |
+| 换人/换 AI | 从零问一遍，把否决过的方案再做一遍 | `HANDOVER.md` 交接，已否决假设留痕 |
+| 踩坑 | 下次再交一次学费 | 经验库沉淀 → 检索命中 → 复用 |
 
 | 维度 | 没有 lunyu | 有 lunyu |
 |---|---|---|

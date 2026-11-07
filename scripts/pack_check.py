@@ -41,6 +41,9 @@ SCRIPT_INDEX_NAMES = {
     "release.py", "send_mail.py", "build_apk.sh", "vm_test.sh",
     "github-publish.sh", "lessons.py", "patrol.py", "self_update.py",
     "self_update.sh", "pack.py", "evolve.py", "pack_check.py",
+    "env_check.py", "impact.py", "handover.py", "codecraft.py",
+    "verify.py", "plan.py", "locate.py", "worktree.py", "loop_guard.py",
+    "check_version.py", "bump.py",
 }
 
 
