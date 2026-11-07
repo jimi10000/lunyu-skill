@@ -18,6 +18,10 @@
 ### Fixed
 - **CI 八连红**：`.github/workflows/ci.yml` 里两段 `python - <<'EOF'` 的 Python 代码全部顶格写在 `run: |` YAML block scalar 内，导致 workflow 解析失败、jobs 全空、8 次运行全部 failure。删掉该 step（其「README 徽章自动同步」改文件不提交、还用 `|| echo` 吞错误，属假绿；版本一致性 `check_version.py` 已覆盖），改用 `workflow_dispatch` 支持手动触发。`--out` 参数同时从误传的文件路径改为目录
 - SKILL.md 一处旧格式错误：`### 过而不改，是谓过矣` 与 `### 11.0` 粘在同一行，已拆分并补全段落正文
+- **CI 首次真跑暴露的三处 Linux 兼容问题**（8 连红期间 workflow 解析失败，步骤从未执行）：
+  - 5 个 `.sh` 脚本在 git 里是 `100644`，Linux 检出后没有可执行位、用户装了技能跑不起来；已用 `git update-index --chmod=+x` 修为 `100755`（Windows 的 `core.filemode` 会把可执行位吞掉）
+  - `test_installed_skill_layout_intact` 硬编码目录名必须是 `lunyu`，但仓库 clone 下来叫 `lunyu-skill`；改为断言布局（`SKILL.md` / `scripts/report.py` / `daily_report.sh`）而非名字
+  - `test_install_windows_sets_workdir` 用 `C:/My Proj` 做路径，Linux 上 `abspath` 会拼成 `/tmp/.../C:/My Proj`；改用真实临时目录，回归点「必须 cd 到项目目录」保持不变
 
 ### Tests
 - 新增 `test_loop_guard.py` 22 个用例（签名归一化 / 五类检测 / 归因 / 报告六段 / 退出码 / 损坏文件 / 轨迹上限），用例数 444 → 466

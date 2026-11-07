@@ -92,10 +92,14 @@ class PathTest(unittest.TestCase):
         self.assertIn("未找到 report.py", buf.getvalue())
 
     def test_installed_skill_layout_intact(self):
-        """真实安装目录的布局没被改坏（冒烟，防止路径函数悄悄改错）。"""
+        """真实安装目录的布局没被改坏（冒烟，防止路径函数悄悄改错）。
+
+        不绑定目录名：仓库 clone 下来叫 lunyu-skill，本地开发目录叫 lunyu，
+        安装到技能市场又叫别的名字。断言「布局」而不是「名字」。
+        """
         d = scheduler.find_skill_dir()
-        self.assertEqual(os.path.basename(d), "lunyu")
-        self.assertTrue(os.path.isfile(os.path.join(d, "SKILL.md")))
+        self.assertTrue(os.path.isfile(os.path.join(d, "SKILL.md")),
+                        "技能根下必须有 SKILL.md")
         self.assertTrue(os.path.isfile(os.path.join(d, "scripts", "report.py")))
         self.assertTrue(os.path.isfile(os.path.join(d, "scripts", "daily_report.sh")))
 
@@ -220,12 +224,15 @@ class CronWriteTest(unittest.TestCase):
              patch.object(scheduler.sys, "executable", "C:/Python/python.exe"):
             class A:
                 time = "18:00"
-                project = "C:/My Proj"
+                project = tmp          # 用真实存在的路径，Linux/Windows 都能 abspath
                 author = "me"
             rc = scheduler.cmd_install(A())
         self.assertEqual(rc, 0)
         tr_value = m.call_args.args[0][5]
-        self.assertIn('cd /d \\"C:\My Proj\\"', tr_value)
+        # 回归点：计划任务默认 CWD 是 System32，必须显式 cd 到项目目录
+        expected_project = os.path.abspath(tmp)
+        self.assertIn('cd /d \\"' + expected_project + '\\"', tr_value)
+        self.assertIn('&&', tr_value)
         # /tr 内层引号已转义
         self.assertIn('\\"', tr_value)
 
